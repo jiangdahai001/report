@@ -18,8 +18,8 @@ public class Dom4jTest {
   public final static String PATH = "C:\\Users\\admin\\Desktop\\test\\";
   public static void main(String[] args) throws Exception {
     System.out.println("hello, world");
-    String path = "C:\\Users\\admin\\Desktop\\test\\2023-06-15-14-57-52.xml";
-    testXPath(path);
+    String path = "C:\\Users\\admin\\Desktop\\test\\test.xml";
+    testIndexOf(path);
   }
 
   // 创建xml
@@ -190,5 +190,41 @@ public class Dom4jTest {
     Element Relationship = (Element) document.selectSingleNode("//day[@name='"+name+"']");
     String target = Relationship.attributeValue("att1");
     System.out.println("target: " + target);
+  }
+
+  public static void testIndexOf(String path) throws Exception {
+    SAXReader reader = new SAXReader();
+    Document document = reader.read(new File(path));
+    Element rootElement = document.getRootElement();
+    handleWfldSimpleElement(rootElement);
+    System.out.println("xxx=====>" + document.asXML());
+//    Element element = (Element) document.selectSingleNode("//w:fldSimple");
+////    Element wr = element.getParent();
+////    Element wp = wr.getParent();
+////    System.out.println(wp.indexOf(wr) + "=====>" + (wp.indexOf(wr) -1) / 2);
+//    Element wp = element.getParent();
+//    System.out.println(wp.indexOf(element) + "=====>" + (wp.indexOf(element) -1) / 2);
+//    Element wr = (Element) element.element("r").clone();
+//    int index = (wp.indexOf(element) -1) / 2;
+//    element.detach();
+//    wp.elements().add(index, wr);
+//    System.out.println(document.asXML());
+  }
+
+
+
+  public static void handleWfldSimpleElement(Element element) {
+    for (Iterator<Element> iterator = element.elementIterator(); iterator.hasNext(); ) {
+      Element el = iterator.next();
+      if("fldSimple".equals(el.getName())) {
+        Element parent = el.getParent();
+        Element wr = (Element) el.element("r").clone();
+        int index = (el.getParent().indexOf(el) - 1) / 2;
+        el.detach();
+        parent.elements().add(index, wr);
+//        el.getParent().remove(el);
+      }
+      handleWfldSimpleElement(el);
+    }
   }
 }

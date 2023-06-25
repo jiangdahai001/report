@@ -33,12 +33,11 @@ public class XMLConverter {
     SAXReader reader = new SAXReader();
     Document document = reader.read(new File(sourcePath));
     Element rootElement = document.getRootElement();
+
     // 以下处理都是开发过程测试用的，最后可以合并在一起
-    handleDividedDomain(rootElement);
     handleWfldSimpleElement(rootElement);
+    handleDividedDomain(rootElement);
     System.out.println("普通文本处理完成");
-    handleWfldCharElement(rootElement);
-    System.out.println("带样式文本处理完成");
     handleTableForeach(rootElement);
     System.out.println("表格循环处理完成");
     handlePictureElement(rootElement, document);
@@ -86,6 +85,12 @@ public class XMLConverter {
   /**
    * 合并域数据，无论是手动将docx另存为xml或者使用spiredoc的命令将docx另存为xml，都会出现域内容被分段的情况
    * 这里需要将一个域中完整的数据拼接到一起
+   * 处理 w:fldChar 元素
+   * <w:fldChar w:fldCharType="begin" />
+   * <w:instrText xml:space="preserve" />
+   * <w:fldChar w:fldCharType="separate" />
+   * <w:t> 需要保留的内容 </w:t>
+   * <w:fldChar w:fldCharType="end" />
    * @param element 目标元素
    */
   public static void handleDividedDomain(Element element) {
@@ -138,32 +143,14 @@ public class XMLConverter {
       Element el = iterator.next();
       if("fldSimple".equals(el.getName())) {
         Element wr = (Element) el.element("r").clone();
-        int index = (el.getParent().indexOf(el) - 1) / 2;
+//        int index = (el.getParent().indexOf(el) - 1) / 2;
+        int index = el.getParent().indexOf(el);
         el.getParent().elements().add(index, wr);
         el.getParent().remove(el);
       }
       handleWfldSimpleElement(el);
     }
   }
-  /**
-   * 处理 w:fldChar 元素
-   * <w:fldChar w:fldCharType="begin" />
-   * <w:instrText xml:space="preserve" />
-   * <w:fldChar w:fldCharType="separate" />
-   * <w:t> 需要保留的内容 </w:t>
-   * <w:fldChar w:fldCharType="end" />
-   * @param element 节点元素
-   */
-  public static void handleWfldCharElement(Element element) {
-    for (Iterator<Element> iterator = element.elementIterator(); iterator.hasNext(); ) {
-      Element el = iterator.next();
-      if("fldChar".equals(el.getName()) || "instrText".equals(el.getName())) {
-        el.getParent().getParent().remove(el.getParent());
-      }
-      handleWfldCharElement(el);
-    }
-  }
-
   /**
    * 处理table中的foreach循环
    * <w:tbl>
@@ -185,7 +172,8 @@ public class XMLConverter {
       if("t".equals(el.getName()) && (el.getText().contains("#foreach") || el.getText().contains("#end"))) {
         Element tbl = el.getParent().getParent().getParent().getParent().getParent();
         Element tr = el.getParent().getParent().getParent().getParent();
-        int index = (tbl.indexOf(tr) - 1) / 2;
+//        int index = (tbl.indexOf(tr) - 1) / 2;
+        int index = tbl.indexOf(tr);
         Element foreach = DocumentHelper.createElement(TEMP_TAG);
         foreach.setText(el.getText());
         tbl.elements().add(index, foreach);
@@ -228,22 +216,29 @@ public class XMLConverter {
       Element el = iterator.next();
       if("docPr".equals(el.getName())) {
         String domainName = el.attributeValue("descr");
-        if(domainName.contains("{") && domainName.contains("}")) {
+        if(domainName!=null && domainName.contains("{") && domainName.contains("}")) {
           Element inline = el.getParent();
           String rId = inline.element("graphic").element("graphicData").element("pic").element("blipFill").element("blip").attributeValue("embed");
           System.out.println("rId: " + rId);
-          List<String> targetList = new ArrayList<>();
-          getPictureTargetById(rId, document.getRootElement(), targetList);
-          String target = targetList.get(0);
-          System.out.println("target: " + target);
-          List<Element> partList = new ArrayList<>();
-          getPkgPartByName(target, document.getRootElement(), partList);
-          Element part = partList.get(0);
-          part.element("binaryData").setText(domainName);
-          // 将 wp:docPr 的 descr 属性置空，之前的值是域，避免多次填充
-          el.addAttribute("descr", "");
-          // 将 pic:cNvPr 的 descr 属性置空，之前的值是域，避免多次填充
-          inline.element("graphic").element("graphicData").element("pic").element("nvPicPr").element("cNvPr").addAttribute("descr", "");
+//          List<String> targetList = new ArrayList<>();
+//          getPictureTargetById(rId, document.getRootElement(), targetList);
+//          String target = targetList.get(0);
+//          System.out.println("target: " + target);
+//          List<Element> partList = new ArrayList<>();
+//          getPkgPartByName(target, document.getRootElement(), partList);
+//          Element part = partList.get(0);
+//          part.element("binaryData").setText(domainName);
+          Element targetElement = (Element) document.selectSingleNode("//*[namespace-uri()='http://schemas.openxmlformats.org/package/2006/relationships' and local-name()='Relationship' and @Id='"+rId+"']");
+          String target = targetElement.attributeValue("Target");
+          Element partElement = (Element) document.selectSingleNode("//*[namespace-uri()='http://schemas.microsoft.com/office/2006/xmlPackage' and local-name()='part' and @pkg:name='/word/"+target+"']");
+          partElement.element("binaryData").setText(domainName);
+
+          // 将 wp:docPr 的 descr 属性删除
+          Attribute docPrDescr = el.attribute("descr");
+          docPrDescr.detach();
+          // 将 pic:cNvPr 的 descr 属性删除
+          Attribute piccNvPrDescr =inline.element("graphic").element("graphicData").element("pic").element("nvPicPr").element("cNvPr").attribute("descr");
+          piccNvPrDescr.detach();
         }
       }
       handlePictureElement(el, document);
