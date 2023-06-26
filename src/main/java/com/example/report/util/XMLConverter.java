@@ -31,7 +31,6 @@ public class XMLConverter {
     // 读取xml
     SAXReader reader = new SAXReader();
     Document document = reader.read(new File(sourcePath));
-    Element rootElement = document.getRootElement();
 
     // 以下处理都是开发过程测试用的，最后可以合并在一起
     handleWfldSimpleElement(document);
@@ -152,7 +151,15 @@ public class XMLConverter {
    */
   public static void handleTableForeach(Document document) {
     // 处理tr级别的foreach循环
-    List<Element> trForeachList = document.selectNodes("//*[local-name()='t' and (contains(text(),'#tbl_tr_foreach') or contains(text(), '#tbl_tr_end'))]");
+    // tbl_tr_foreach, tbl_tr_end
+    // tbl_tr_if, tbl_tr_else, tbl_tr_elseif, tbl_tr_end
+    StringBuffer trBuffer = new StringBuffer();
+    trBuffer.append("contains(text(),'#tbl_tr_foreach')");
+    trBuffer.append(" or contains(text(), '#tbl_tr_end')");
+    trBuffer.append(" or contains(text(), '#tbl_tr_if')");
+    trBuffer.append(" or contains(text(), '#tbl_tr_else')");
+    trBuffer.append(" or contains(text(), '#tbl_tr_elseif')");
+    List<Element> trForeachList = document.selectNodes("//*[local-name()='t' and ("+trBuffer.toString()+")]");
     for(Element wt:trForeachList) {
       Element tr = (Element) wt.selectSingleNode("ancestor::w:tr");
       Element tbl = (Element) wt.selectSingleNode("ancestor::w:tbl");
@@ -165,7 +172,10 @@ public class XMLConverter {
       tbl.remove(tr);
     }
     // 处理tc级别的foreach循环
-    List<Element> tcForeachList = document.selectNodes("//*[local-name()='t' and (contains(text(),'#tbl_tc_foreach') or contains(text(), '#tbl_tc_end'))]");
+    StringBuffer tcBuffer = new StringBuffer();
+    tcBuffer.append("contains(text(),'#tbl_tc_foreach')");
+    tcBuffer.append(" or contains(text(), '#tbl_tc_end')");
+    List<Element> tcForeachList = document.selectNodes("//*[local-name()='t' and ("+tcBuffer.toString()+")]");
     for(Element wt:tcForeachList) {
       Element wp = (Element) wt.selectSingleNode("ancestor::w:p");
       Element tc = (Element) wt.selectSingleNode("ancestor::w:tc");
