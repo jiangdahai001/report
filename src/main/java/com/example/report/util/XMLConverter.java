@@ -237,9 +237,16 @@ public class XMLConverter {
     }
   }
 
+  /**
+   * 处理图片foreach循环
+   * 思路：找到#pic_foreach, #pic_end标签，紧跟在#pic_foreach所在的w:p之后的w:p兄弟元素就是图片元素
+   * 替换图片元素中的rId内容，引入$!{foreach.index}实现图片数量的动态变化
+   * 新增Relationship及pkg:part，同样引入$!{foreach.index}实现图片数量的动态变化
+   * @param document 目标文档
+   */
   public static void handlePictureForeach(Document document) {
-    List<Element> pForeachList = document.selectNodes("//*[namespace-uri()='http://schemas.openxmlformats.org/wordprocessingml/2006/main' and local-name()='t' and (contains(text(),'#p_foreach') or contains(text(), '#p_end'))]");
-    for (Element wt:pForeachList) {
+    List<Element> picForeachList = document.selectNodes("//*[namespace-uri()='http://schemas.openxmlformats.org/wordprocessingml/2006/main' and local-name()='t' and (contains(text(),'#pic_foreach') or contains(text(), '#pic_end'))]");
+    for (Element wt:picForeachList) {
       // 获取foreach标签内容
       String foreachContent = wt.getTextTrim();
       foreachContent = foreachContent.replace("p_", "");

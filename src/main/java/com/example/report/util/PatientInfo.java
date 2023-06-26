@@ -1,16 +1,20 @@
 package com.example.report.util;
 
+import java.util.List;
+
 public class PatientInfo {
   private String name;
   private String phone;
   private String gender;
   private int age;
+  private List<String> geneList;
   public PatientInfo() {}
-  public PatientInfo(String name, String phone, String gender, int age) {
+  public PatientInfo(String name, String phone, String gender, int age, List<String> geneList) {
     this.name = name;
     this.phone = phone;
     this.gender = gender;
     this.age = age;
+    this.geneList = geneList;
   }
 
   public String getName() {
@@ -43,5 +47,13 @@ public class PatientInfo {
 
   public void setAge(int age) {
     this.age = age;
+  }
+
+  public List<String> getGeneList() {
+    return geneList;
+  }
+
+  public void setGeneList(List<String> geneList) {
+    this.geneList = geneList;
   }
 }
