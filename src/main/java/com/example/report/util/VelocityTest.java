@@ -65,10 +65,14 @@ public class VelocityTest {
     PatientInfo pi = new PatientInfo("张三", "13512341234", "男", 16, geneList);
     ctx.put("pi", pi);
     List<PatientInfo> list = new ArrayList<>();
-//    list.add(new PatientInfo("lisi1", "13512345678", "male", 18, geneList));
-//    list.add(new PatientInfo("lisi2", "13512345678", "male", 18, geneList));
-//    list.add(new PatientInfo("lisi3", "13512345678", "male", 18, geneList));
+    list.add(new PatientInfo("lisi1", "13512345678", "male", 18, geneList));
+    list.add(new PatientInfo("lisi2", "13512345678", "male", 18, geneList));
+    list.add(new PatientInfo("lisi3", "13512345678", "male", 18, geneList));
     ctx.put("list", list);
+    List<CancerInfo> cancerList = new ArrayList<>();
+    cancerList.add(new CancerInfo("lung", false));
+    cancerList.add(new CancerInfo("bone", true));
+    ctx.put("cancerList", cancerList);
     ctx.put("picBase64", PictureData.getPicString1());
     List<String> picBase64List = new ArrayList<>();
     picBase64List.add(PictureData.getPicString1());

@@ -175,6 +175,9 @@ public class XMLConverter {
     StringBuffer tcBuffer = new StringBuffer();
     tcBuffer.append("contains(text(),'#tbl_tc_foreach')");
     tcBuffer.append(" or contains(text(), '#tbl_tc_end')");
+    tcBuffer.append(" or contains(text(), '#tbl_tc_if')");
+    tcBuffer.append(" or contains(text(), '#tbl_tc_else')");
+    tcBuffer.append(" or contains(text(), '#tbl_tc_elseif')");
     List<Element> tcForeachList = document.selectNodes("//*[local-name()='t' and ("+tcBuffer.toString()+")]");
     for(Element wt:tcForeachList) {
       Element wp = (Element) wt.selectSingleNode("ancestor::w:p");
@@ -186,6 +189,38 @@ public class XMLConverter {
       foreach.setText(text);
       tc.elements().add(index, foreach);
       tc.remove(wp);
+    }
+    // 处理tc级别的行内foreach循环
+    List<Element> tcInlineForeachList = document.selectNodes("//*[local-name()='t' and contains(text(), '#tbl_tc_inline_foreach')]");
+    for(Element wt:tcInlineForeachList) {
+      Element wp = (Element) wt.selectSingleNode("ancestor::w:p");
+      List<Element> wpSiblingList = wp.selectNodes("following-sibling::w:p");
+      // 将所有wp后续的兄弟元素中的wr子元素都放到第一个wp中，其余的兄弟元素就可以detach了
+      for(Element sibling:wpSiblingList) {
+        List<Element> wrList = sibling.selectNodes("descendant::w:r");
+        wrList.forEach(wr -> {
+          wr.detach();
+        });
+        wp.elements().addAll(wrList);
+        sibling.detach();
+      }
+      StringBuffer tcInlineBuffer = new StringBuffer();
+      tcInlineBuffer.append("contains(text(),'#tbl_tc_inline_foreach')");
+      tcInlineBuffer.append(" or contains(text(), '#tbl_tc_inline_end')");
+      tcInlineBuffer.append(" or contains(text(), '#tbl_tc_inline_if')");
+      tcInlineBuffer.append(" or contains(text(), '#tbl_tc_inline_else')");
+      tcInlineBuffer.append(" or contains(text(), '#tbl_tc_inline_elseif')");
+      List<Element> wtList = wp.selectNodes("descendant::*[local-name()='t' and ("+tcInlineBuffer.toString()+")]");
+      for(Element wt2:wtList) {
+        Element wr = (Element) wt2.selectSingleNode("ancestor::w:r");
+        int index = wp.indexOf(wr);
+        if(indexFitFlag) index = (index - 1) / 2;
+        Element foreach = DocumentHelper.createElement(TEMP_TAG);
+        String text = wt2.getText().replace("tbl_tc_inline_", "");
+        foreach.setText(text);
+        wp.elements().add(index, foreach);
+        wp.remove(wr);
+      }
     }
   }
 
