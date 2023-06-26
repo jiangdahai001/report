@@ -19,6 +19,7 @@ import static java.util.regex.Pattern.compile;
 
 public class XMLConverter {
   public static final String TEMP_TAG = "geneplus_placeholder";
+  // 注意：这里的Element.indexOf获取的索引和Element.elements()获取的list的索引不能一一对应，目前看是x=(n-1)/2
   public static final boolean indexFitFlag = false;
   public static void main(String[] args) throws Exception{
     System.out.println("XMLConverter");
@@ -36,7 +37,7 @@ public class XMLConverter {
     handleWfldSimpleElement(rootElement);
     handleDividedDomain(rootElement);
     System.out.println("普通文本处理完成");
-    handleTableForeach(rootElement);
+    handleTableForeach(document);
     System.out.println("表格循环处理完成");
     handlePictureElement(rootElement, document);
     System.out.println("图片处理完成");
@@ -152,35 +153,35 @@ public class XMLConverter {
     }
   }
   /**
-   * 处理table中的foreach循环
-   * <w:tbl>
-   *   <w:tr>
-   *     <w:tc>
-   *       <w:p>
-   *         <w:r>
-   *           <w:t>#foreach / #end</w:t>
-   *         </w:r>
-   *       </w:p>
-   *     </w:tc>
-   *   </w:tr>
-   * </w:tbl>
-   * @param element
+   * 处理table中tr和tc级别的foreach循环
+   * @param document 文档元素
    */
-  public static void handleTableForeach(Element element) {
-    for (Iterator<Element> iterator = element.elementIterator(); iterator.hasNext(); ) {
-      Element el = iterator.next();
-      if("t".equals(el.getName()) && (el.getText().contains("#tbl_tr_foreach") || el.getText().contains("#tbl_tr_end"))) {
-        Element tbl = el.getParent().getParent().getParent().getParent().getParent();
-        Element tr = el.getParent().getParent().getParent().getParent();
-        int index = tbl.indexOf(tr);
-        if(indexFitFlag) index = (index - 1) / 2;
-        Element foreach = DocumentHelper.createElement(TEMP_TAG);
-        String text = el.getText().replace("tbl_tr_", "");
-        foreach.setText(text);
-        tbl.elements().add(index, foreach);
-        tbl.remove(tr);
-      }
-      handleTableForeach(el);
+  public static void handleTableForeach(Document document) {
+    // 处理tr级别的foreach循环
+    List<Element> trForeachList = document.selectNodes("//*[local-name()='t' and (contains(text(),'#tbl_tr_foreach') or contains(text(), '#tbl_tr_end'))]");
+    for(Element wt:trForeachList) {
+      Element tr = (Element) wt.selectSingleNode("ancestor::w:tr");
+      Element tbl = (Element) wt.selectSingleNode("ancestor::w:tbl");
+      int index = tbl.indexOf(tr);
+      if(indexFitFlag) index = (index - 1) / 2;
+      Element foreach = DocumentHelper.createElement(TEMP_TAG);
+      String text = wt.getText().replace("tbl_tr_", "");
+      foreach.setText(text);
+      tbl.elements().add(index, foreach);
+      tbl.remove(tr);
+    }
+    // 处理tc级别的foreach循环
+    List<Element> tcForeachList = document.selectNodes("//*[local-name()='t' and (contains(text(),'#tbl_tc_foreach') or contains(text(), '#tbl_tc_end'))]");
+    for(Element wt:tcForeachList) {
+      Element wp = (Element) wt.selectSingleNode("ancestor::w:p");
+      Element tc = (Element) wt.selectSingleNode("ancestor::w:tc");
+      int index = tc.indexOf(wp);
+      if(indexFitFlag) index = (index - 1) / 2;
+      Element foreach = DocumentHelper.createElement(TEMP_TAG);
+      String text = wt.getText().replace("tbl_tc_", "");
+      foreach.setText(text);
+      tc.elements().add(index, foreach);
+      tc.remove(wp);
     }
   }
 
@@ -208,7 +209,7 @@ public class XMLConverter {
    * 2，找到对应的a:blip 标签的 r:embed 属性值，就是word给图片分配的id
    * 3，通过id属性找到对应的Relationship，获取Target属性的值，就是对应图片在word中的实际名称
    * 4，通过名称（前面要拼上/word/）找到对应图片的base64编码，将编码内容替换为域名
-   * 5，将前面 wp:docPr 的descr属性清空，将pic:cNvPr 的descr属性清空
+   * 5，将前面 wp:docPr 的descr属性删除，将pic:cNvPr 的descr属性删除
    * @param element 目标元素
    * @param document 文档对象
    */

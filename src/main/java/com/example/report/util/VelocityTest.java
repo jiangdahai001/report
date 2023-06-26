@@ -20,7 +20,7 @@ import java.util.Properties;
 public class VelocityTest {
   public static String TEST_PATH = "C:\\Users\\admin\\Desktop\\test\\";
   public static String DOCX_FILE = "ahello.docx";
-  public static String XML_FILE = "2023-06-26-10-17-16.xml";
+  public static String XML_FILE = "velocity.xml";
   public static String TARGET_FILE = "ahello.doc";
   public static void main(String[] args) {
     System.out.println("hello, world, 你好！");
