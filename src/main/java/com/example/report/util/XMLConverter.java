@@ -35,7 +35,7 @@ public class XMLConverter {
 
     // 以下处理都是开发过程测试用的，最后可以合并在一起
     handleWfldSimpleElement(rootElement);
-    handleDividedDomain(rootElement);
+    handleDividedDomain(document);
     System.out.println("普通文本处理完成");
     handleTableForeach(document);
     System.out.println("表格循环处理完成");
@@ -91,25 +91,24 @@ public class XMLConverter {
    * <w:fldChar w:fldCharType="separate" />
    * <w:t> 需要保留的内容 </w:t>
    * <w:fldChar w:fldCharType="end" />
-   * @param element 目标元素
+   * @param document 文档元素
    */
-  public static void handleDividedDomain(Element element) {
-    // 遍历参数元素
-    for (Iterator<Node> iterator = element.elementIterator(); iterator.hasNext(); ) {
-      // 获取当前元素
-      Element currentElement = (Element) iterator.next();
-      if ("fldChar".equals(currentElement.getName()) && "begin".equals(currentElement.attributeValue("fldCharType"))) {
-        Element parent = currentElement.getParent();
-        Element grandpa = parent.getParent();
+  public static void handleDividedDomain(Document document) {
+    List<Element> beginList = document.selectNodes("//*[local-name()='fldChar']");
+    for(Element element:beginList) {
+      if("begin".equals(element.attributeValue("fldCharType"))) {
+        System.out.println("txt: " + element.getTextTrim());
+        Element wp = (Element) element.selectSingleNode("ancestor::w:p");
+        Element wr = (Element) element.selectSingleNode("ancestor::w:r");
         Element domainElement = null;
         // 注意：这里的Element.indexOf获取的索引和Element.elements()获取的list的索引不能一一对应，目前看是x=(n-1)/2
-        int indexStart = grandpa.indexOf(parent);
+        int indexStart = wp.indexOf(wr);
         if(indexFitFlag) indexStart = (indexStart - 1)/2;
         int indexEnd = 0;
         StringBuffer domainValue = new StringBuffer();
         // 找到分割域的起始和结束的索引，并将所有索引内容拼接到一起
-        for (int i = indexStart; i < grandpa.elements().size(); i++) {
-          Element el = (Element) grandpa.elements().get(i);
+        for (int i = indexStart; i < wp.elements().size(); i++) {
+          Element el = (Element) wp.elements().get(i);
           if (el.element("t") != null) {
             domainValue.append(el.element("t").getTextTrim());
             if (domainElement == null) {
@@ -125,13 +124,12 @@ public class XMLConverter {
         }
         // 删除分割的域内容
         for (int i = indexEnd; i >= indexStart; i--) {
-          ((Element) grandpa.elements().get(i)).detach();
+          ((Element) wp.elements().get(i)).detach();
         }
         // 在之前分割域开始的位置加上新的拼接好的域元素
         domainElement.element("t").setText(domainValue.toString());
-        grandpa.elements().add(indexStart, domainElement);
+        wp.elements().add(indexStart, domainElement);
       }
-      handleDividedDomain(currentElement);
     }
   }
   /**
@@ -250,7 +248,7 @@ public class XMLConverter {
     for (Element wt:picForeachList) {
       // 获取foreach标签内容
       String foreachContent = wt.getTextTrim();
-      foreachContent = foreachContent.replace("p_", "");
+      foreachContent = foreachContent.replace("pic_", "");
       // 找到w:p祖先元素
       Element wp = (Element) wt.selectSingleNode("ancestor::w:p");
       // 如果是foreach，那么接下来找到w:p的下一个兄弟元素，就是放占位图片的
@@ -303,7 +301,7 @@ public class XMLConverter {
       int index = wp.getParent().indexOf(wp);
       if(indexFitFlag) index = (index - 1) / 2;
       Element tmp = DocumentHelper.createElement(TEMP_TAG);
-      String text = wt.getText().replace("p_", "");
+      String text = wt.getText().replace("pic_", "");
       tmp.setText(text);
       wp.getParent().elements().add(index, tmp);
       wp.detach();
