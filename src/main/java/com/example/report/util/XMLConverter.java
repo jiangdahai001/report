@@ -34,12 +34,12 @@ public class XMLConverter {
     Element rootElement = document.getRootElement();
 
     // 以下处理都是开发过程测试用的，最后可以合并在一起
-    handleWfldSimpleElement(rootElement);
+    handleWfldSimpleElement(document);
     handleDividedDomain(document);
     System.out.println("普通文本处理完成");
     handleTableForeach(document);
     System.out.println("表格循环处理完成");
-    handlePictureElement(rootElement, document);
+    handlePictureElement( document);
     System.out.println("图片处理完成");
     handlePictureForeach(document);
     document = removeTempTag(document);
@@ -97,7 +97,6 @@ public class XMLConverter {
     List<Element> beginList = document.selectNodes("//*[local-name()='fldChar']");
     for(Element element:beginList) {
       if("begin".equals(element.attributeValue("fldCharType"))) {
-        System.out.println("txt: " + element.getTextTrim());
         Element wp = (Element) element.selectSingleNode("ancestor::w:p");
         Element wr = (Element) element.selectSingleNode("ancestor::w:r");
         Element domainElement = null;
@@ -135,19 +134,16 @@ public class XMLConverter {
   /**
    * 处理 w:fldSimple 元素
    * <w:fldSimple>需要保留的内容</w:fldSimple>
-   * @param element 节点元素
+   * @param document 文档元素
    */
-  public static void handleWfldSimpleElement(Element element) {
-    for (Iterator<Element> iterator = element.elementIterator(); iterator.hasNext(); ) {
-      Element el = iterator.next();
-      if("fldSimple".equals(el.getName())) {
-        Element wr = (Element) el.element("r").clone();
-        int index = el.getParent().indexOf(el);
-        if(indexFitFlag) index = (index - 1) / 2;
-        el.getParent().elements().add(index, wr);
-        el.getParent().remove(el);
-      }
-      handleWfldSimpleElement(el);
+  public static void handleWfldSimpleElement(Document document) {
+    List<Element> wfldSimpleList = document.selectNodes("//*[local-name()='fldSimple']");
+    for(Element element:wfldSimpleList) {
+      Element wr = (Element) element.selectSingleNode("descendant::w:r").clone();
+      int index = element.getParent().indexOf(element);
+      if(indexFitFlag) index = (index - 1) / 2;
+      element.getParent().elements().add(index, wr);
+      element.getParent().remove(element);
     }
   }
   /**
@@ -208,31 +204,25 @@ public class XMLConverter {
    * 3，通过id属性找到对应的Relationship，获取Target属性的值，就是对应图片在word中的实际名称
    * 4，通过名称（前面要拼上/word/）找到对应图片的base64编码，将编码内容替换为域名
    * 5，将前面 wp:docPr 的descr属性删除，将pic:cNvPr 的descr属性删除
-   * @param element 目标元素
    * @param document 文档对象
    */
-  public static void handlePictureElement(Element element, Document document) {
-    for (Iterator<Element> iterator = element.elementIterator(); iterator.hasNext(); ) {
-      Element el = iterator.next();
-      if("docPr".equals(el.getName())) {
-        String domainName = el.attributeValue("descr");
-        if(domainName!=null && domainName.contains("{") && domainName.contains("}")) {
-          Element inline = el.getParent();
-          String rId = inline.element("graphic").element("graphicData").element("pic").element("blipFill").element("blip").attributeValue("embed");
-          Element targetElement = (Element) document.selectSingleNode("//*[namespace-uri()='http://schemas.openxmlformats.org/package/2006/relationships' and local-name()='Relationship' and @Id='"+rId+"']");
-          String target = targetElement.attributeValue("Target");
-          Element partElement = (Element) document.selectSingleNode("//*[namespace-uri()='http://schemas.microsoft.com/office/2006/xmlPackage' and local-name()='part' and @pkg:name='/word/"+target+"']");
-          partElement.element("binaryData").setText(domainName);
+  public static void handlePictureElement(Document document) {
+    List<Element> docPrList = document.selectNodes("//*[local-name()='docPr' and contains(@descr, '$!{')  and contains(@descr, '}')]");
+    for(Element element:docPrList) {
+      String domainName = element.attributeValue("descr");
+      Element inline = element.getParent();
+      String rId = ((Element) inline.selectSingleNode("descendant::*[namespace-uri()='http://schemas.openxmlformats.org/drawingml/2006/main' and local-name()='blip']")).attributeValue("embed");
+      Element targetElement = (Element) document.selectSingleNode("//*[namespace-uri()='http://schemas.openxmlformats.org/package/2006/relationships' and local-name()='Relationship' and @Id='"+rId+"']");
+      String target = targetElement.attributeValue("Target");
+      Element partElement = (Element) document.selectSingleNode("//*[namespace-uri()='http://schemas.microsoft.com/office/2006/xmlPackage' and local-name()='part' and @pkg:name='/word/"+target+"']");
+      partElement.element("binaryData").setText(domainName);
 
-          // 将 wp:docPr 的 descr 属性删除
-          Attribute docPrDescr = el.attribute("descr");
-          docPrDescr.detach();
-          // 将 pic:cNvPr 的 descr 属性删除
-          Attribute piccNvPrDescr =inline.element("graphic").element("graphicData").element("pic").element("nvPicPr").element("cNvPr").attribute("descr");
-          piccNvPrDescr.detach();
-        }
-      }
-      handlePictureElement(el, document);
+      // 将 wp:docPr 的 descr 属性删除
+      Attribute docPrDescr = element.attribute("descr");
+      docPrDescr.detach();
+      // 将 pic:cNvPr 的 descr 属性删除
+      Attribute piccNvPrDescr =inline.element("graphic").element("graphicData").element("pic").element("nvPicPr").element("cNvPr").attribute("descr");
+      piccNvPrDescr.detach();
     }
   }
 
