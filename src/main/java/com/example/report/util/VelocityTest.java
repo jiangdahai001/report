@@ -20,7 +20,7 @@ import java.util.Properties;
 public class VelocityTest {
   public static String TEST_PATH = "C:\\Users\\admin\\Desktop\\test\\";
   public static String DOCX_FILE = "ahello.docx";
-  public static String XML_FILE = "2023-06-24-16-13-38.xml";
+  public static String XML_FILE = "2023-06-26-10-17-16.xml";
   public static String TARGET_FILE = "ahello.doc";
   public static void main(String[] args) {
     System.out.println("hello, world, 你好！");
@@ -66,7 +66,10 @@ public class VelocityTest {
     list.add(new PatientInfo("lisi3", "13512345678", "male", 18));
     ctx.put("list", list);
     ctx.put("picBase64", PictureData.getPicString1());
-    ctx.put("picAbcBase64", PictureData.getPicString2());
+    List<String> picBase64List = new ArrayList<>();
+    picBase64List.add(PictureData.getPicString1());
+    picBase64List.add(PictureData.getPicString2());
+    ctx.put("picBase64List", picBase64List);
     // 输出
 //    StringWriter sw = new StringWriter();
 //    t.merge(ctx, sw);

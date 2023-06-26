@@ -11,10 +11,7 @@ import java.io.IOException;
 import java.io.OutputStreamWriter;
 import java.nio.charset.StandardCharsets;
 import java.text.SimpleDateFormat;
-import java.util.ArrayList;
-import java.util.Date;
-import java.util.Iterator;
-import java.util.List;
+import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -22,6 +19,7 @@ import static java.util.regex.Pattern.compile;
 
 public class XMLConverter {
   public static final String TEMP_TAG = "geneplus_placeholder";
+  public static final boolean indexFitFlag = false;
   public static void main(String[] args) throws Exception{
     System.out.println("XMLConverter");
     String sourcePath = "C:\\Users\\admin\\Desktop\\test\\ahello.xml";
@@ -42,6 +40,7 @@ public class XMLConverter {
     System.out.println("表格循环处理完成");
     handlePictureElement(rootElement, document);
     System.out.println("图片处理完成");
+    handlePictureForeach(document);
     document = removeTempTag(document);
     System.out.println("临时标签处理完成");
     writeXML(document, targetPath);
@@ -103,7 +102,8 @@ public class XMLConverter {
         Element grandpa = parent.getParent();
         Element domainElement = null;
         // 注意：这里的Element.indexOf获取的索引和Element.elements()获取的list的索引不能一一对应，目前看是x=(n-1)/2
-        int indexStart = (grandpa.indexOf(parent) - 1)/2;
+        int indexStart = grandpa.indexOf(parent);
+        if(indexFitFlag) indexStart = (indexStart - 1)/2;
         int indexEnd = 0;
         StringBuffer domainValue = new StringBuffer();
         // 找到分割域的起始和结束的索引，并将所有索引内容拼接到一起
@@ -143,8 +143,8 @@ public class XMLConverter {
       Element el = iterator.next();
       if("fldSimple".equals(el.getName())) {
         Element wr = (Element) el.element("r").clone();
-//        int index = (el.getParent().indexOf(el) - 1) / 2;
         int index = el.getParent().indexOf(el);
+        if(indexFitFlag) index = (index - 1) / 2;
         el.getParent().elements().add(index, wr);
         el.getParent().remove(el);
       }
@@ -169,13 +169,14 @@ public class XMLConverter {
   public static void handleTableForeach(Element element) {
     for (Iterator<Element> iterator = element.elementIterator(); iterator.hasNext(); ) {
       Element el = iterator.next();
-      if("t".equals(el.getName()) && (el.getText().contains("#foreach") || el.getText().contains("#end"))) {
+      if("t".equals(el.getName()) && (el.getText().contains("#tbl_tr_foreach") || el.getText().contains("#tbl_tr_end"))) {
         Element tbl = el.getParent().getParent().getParent().getParent().getParent();
         Element tr = el.getParent().getParent().getParent().getParent();
-//        int index = (tbl.indexOf(tr) - 1) / 2;
         int index = tbl.indexOf(tr);
+        if(indexFitFlag) index = (index - 1) / 2;
         Element foreach = DocumentHelper.createElement(TEMP_TAG);
-        foreach.setText(el.getText());
+        String text = el.getText().replace("tbl_tr_", "");
+        foreach.setText(text);
         tbl.elements().add(index, foreach);
         tbl.remove(tr);
       }
@@ -219,15 +220,6 @@ public class XMLConverter {
         if(domainName!=null && domainName.contains("{") && domainName.contains("}")) {
           Element inline = el.getParent();
           String rId = inline.element("graphic").element("graphicData").element("pic").element("blipFill").element("blip").attributeValue("embed");
-          System.out.println("rId: " + rId);
-//          List<String> targetList = new ArrayList<>();
-//          getPictureTargetById(rId, document.getRootElement(), targetList);
-//          String target = targetList.get(0);
-//          System.out.println("target: " + target);
-//          List<Element> partList = new ArrayList<>();
-//          getPkgPartByName(target, document.getRootElement(), partList);
-//          Element part = partList.get(0);
-//          part.element("binaryData").setText(domainName);
           Element targetElement = (Element) document.selectSingleNode("//*[namespace-uri()='http://schemas.openxmlformats.org/package/2006/relationships' and local-name()='Relationship' and @Id='"+rId+"']");
           String target = targetElement.attributeValue("Target");
           Element partElement = (Element) document.selectSingleNode("//*[namespace-uri()='http://schemas.microsoft.com/office/2006/xmlPackage' and local-name()='part' and @pkg:name='/word/"+target+"']");
@@ -244,22 +236,69 @@ public class XMLConverter {
       handlePictureElement(el, document);
     }
   }
-  private static void getPkgPartByName(String name, Element element, List<Element> partList) {
-    for(Iterator<Element> iterator = element.elementIterator();iterator.hasNext();) {
-      Element el = iterator.next();
-      if("part".equals(el.getName()) && el.attributeValue("name").equals("/word/" + name)) {
-        partList.add(el);
+
+  public static void handlePictureForeach(Document document) {
+    List<Element> pForeachList = document.selectNodes("//*[namespace-uri()='http://schemas.openxmlformats.org/wordprocessingml/2006/main' and local-name()='t' and (contains(text(),'#p_foreach') or contains(text(), '#p_end'))]");
+    for (Element wt:pForeachList) {
+      // 获取foreach标签内容
+      String foreachContent = wt.getTextTrim();
+      foreachContent = foreachContent.replace("p_", "");
+      // 找到w:p祖先元素
+      Element wp = (Element) wt.selectSingleNode("ancestor::w:p");
+      // 如果是foreach，那么接下来找到w:p的下一个兄弟元素，就是放占位图片的
+      Element wpPic = (Element) wp.selectSingleNode("following-sibling::w:p");
+      if(wpPic != null) {
+        // 获取foreach中item的内容
+        String foreachItemContent = foreachContent.substring(foreachContent.indexOf("$"), foreachContent.indexOf("}") + 1);
+        // 生成唯一id，用于关联w:drawing中rId---Relationship中Target---pkg:part中的binaryData
+        String uuid = UUID.randomUUID().toString().replace("-","");
+        Element blip = (Element) wpPic.selectSingleNode("descendant::*[namespace-uri()='http://schemas.openxmlformats.org/drawingml/2006/main' and local-name()='blip']");
+        blip.addAttribute("embed", "rId_" + uuid + "_$!{foreach.index}");
+        // 新增Relationship循环开始标签
+        Element relationshipForeachBegin = DocumentHelper.createElement(TEMP_TAG);
+        relationshipForeachBegin.setText(foreachContent);
+        // 新增Relationship循环内容标签
+        Element relationshipForeachContent = DocumentHelper.createElement(QName.get("Relationship", "http://schemas.openxmlformats.org/package/2006/relationships"));
+        relationshipForeachContent.addAttribute("Id", "rId_" + uuid + "_$!{foreach.index}");
+        relationshipForeachContent.addAttribute("Type", "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image");
+        relationshipForeachContent.addAttribute("Target", "media/image_"+uuid+"_$!{foreach.index}.png");
+        // 新增Relationship循环结束标签
+        Element relationshipForeachEnd = DocumentHelper.createElement(TEMP_TAG);
+        relationshipForeachEnd.setText("#end");
+        // 将Relationship循环标签添加到Relationships中
+        Element pkgPart = (Element) document.selectSingleNode("//*[namespace-uri()='http://schemas.microsoft.com/office/2006/xmlPackage' and local-name()='part' and @pkg:name='/word/_rels/document.xml.rels']");
+        Element relationships = (Element) pkgPart.selectSingleNode("descendant::*[namespace-uri()='http://schemas.openxmlformats.org/package/2006/relationships' and local-name()='Relationships']");
+        relationships.elements().add(relationshipForeachBegin);
+        relationships.elements().add(relationshipForeachContent);
+        relationships.elements().add(relationshipForeachEnd);
+        // 新增pkg:part标签开始标签
+        Element pkgPartForeachBegin = DocumentHelper.createElement(TEMP_TAG);
+        pkgPartForeachBegin.setText(foreachContent);
+        // 新增pkg:part循环内容标签
+        Element pkgPartForeachContent = DocumentHelper.createElement("pkg:part");
+        pkgPartForeachContent.addAttribute("pkg:name", "/word/media/image_"+uuid+"_$!{foreach.index}.png");
+        pkgPartForeachContent.addAttribute("pkg:contentType", "image/png");
+        pkgPartForeachContent.addAttribute("pkg:compression", "store");
+        Element binaryData = DocumentHelper.createElement("pkg:binaryData");
+        binaryData.setText(foreachItemContent);
+        pkgPartForeachContent.add(binaryData);
+        // 新增pkg:part循环结束标签
+        Element pkgPartForeachEnd = DocumentHelper.createElement(TEMP_TAG);
+        pkgPartForeachEnd.setText("#end");
+        // 将pkg:part循环标签添加到pkg:package中
+        Element pkgPackage = (Element) document.selectSingleNode("//*[namespace-uri()='http://schemas.microsoft.com/office/2006/xmlPackage' and local-name()='package']");
+        pkgPackage.elements().add(pkgPartForeachBegin);
+        pkgPackage.elements().add(pkgPartForeachContent);
+        pkgPackage.elements().add(pkgPartForeachEnd);
       }
-      getPkgPartByName(name, el, partList);
-    }
-  }
-  private static void getPictureTargetById(String rId, Element element, List<String> targetList) {
-    for (Iterator<Element> iterator = element.elementIterator(); iterator.hasNext(); ) {
-      Element el = iterator.next();
-      if("Relationship".equals(el.getName()) && rId.equals(el.attributeValue("Id"))) {
-        targetList.add(el.attributeValue("Target"));
-      }
-      getPictureTargetById(rId, el, targetList);
+      // 将w:p祖先元素替换成临时标签元素
+      int index = wp.getParent().indexOf(wp);
+      if(indexFitFlag) index = (index - 1) / 2;
+      Element tmp = DocumentHelper.createElement(TEMP_TAG);
+      String text = wt.getText().replace("p_", "");
+      tmp.setText(text);
+      wp.getParent().elements().add(index, tmp);
+      wp.detach();
     }
   }
 }
