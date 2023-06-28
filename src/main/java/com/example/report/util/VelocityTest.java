@@ -8,11 +8,8 @@ import org.apache.velocity.app.VelocityEngine;
 import org.apache.velocity.runtime.RuntimeConstants;
 
 import java.io.*;
-import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Properties;
+import java.util.*;
 
 /**
  * 从xml生成doc，测试java将数据填到具体的对象中，使用velocity模板进行填充
@@ -20,10 +17,13 @@ import java.util.Properties;
 public class VelocityTest {
   public static String TEST_PATH = "C:\\Users\\admin\\Desktop\\test\\";
   public static String DOCX_FILE = "ahello.docx";
-  public static String XML_FILE = "velocity.xml";
+  public static String XML_FILE = "a.xml";
   public static String TARGET_FILE = "ahello.doc";
   public static void main(String[] args) {
     System.out.println("hello, world, 你好！");
+//    String wt = "#vmerge($!{ci.apple})";
+//    String domainValue = wt.replaceAll("^#vmerge\\(", "").replaceAll("\\)$", "");
+//    System.out.println(domainValue);
     test();
   }
 
@@ -61,7 +61,7 @@ public class VelocityTest {
     List<String> geneList = new ArrayList<>();
     geneList.add("SZX");
     geneList.add("DBC");
-    geneList.add("FLXYE");
+    geneList.add("FLY");
     PatientInfo pi = new PatientInfo("张三", "13512341234", "男", 16, geneList);
     ctx.put("pi", pi);
     List<PatientInfo> list = new ArrayList<>();
@@ -70,14 +70,18 @@ public class VelocityTest {
     list.add(new PatientInfo("lisi3", "13512345678", "male", 18, geneList));
     ctx.put("list", list);
     List<CancerInfo> cancerList = new ArrayList<>();
-    cancerList.add(new CancerInfo("lung", false));
-    cancerList.add(new CancerInfo("bone", true));
+    cancerList.add(new CancerInfo("lung", false, "", "", ""));
+    cancerList.add(new CancerInfo("bone", true, "", "", ""));
     ctx.put("cancerList", cancerList);
     ctx.put("picBase64", PictureData.getPicString1());
     List<String> picBase64List = new ArrayList<>();
     picBase64List.add(PictureData.getPicString1());
     picBase64List.add(PictureData.getPicString2());
     ctx.put("picBase64List", picBase64List);
+    // 表格合并数据
+    CancerInfo ci = new CancerInfo("brain", false, "", "", "a");
+    ctx.put("ci", ci);
+
     // 输出
 //    StringWriter sw = new StringWriter();
 //    t.merge(ctx, sw);

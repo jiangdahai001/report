@@ -17,6 +17,9 @@ import java.util.regex.Pattern;
 
 import static java.util.regex.Pattern.compile;
 
+/**
+ * 从编写好的模板docx，另存为或者spiredoc转换成为xml文件，然后转换为可以给velocity填值的xml文件
+ */
 public class XMLConverter {
   public static final String TEMP_TAG = "geneplus_placeholder";
   // 注意：这里的Element.indexOf获取的索引和Element.elements()获取的list的索引不能一一对应，目前看是x=(n-1)/2
@@ -36,6 +39,10 @@ public class XMLConverter {
     handleWfldSimpleElement(document);
     handleDividedDomain(document);
     System.out.println("普通文本处理完成");
+    handlePset(document);
+    handlePif(document);
+    handleVelocityMacro(document);
+    handleTableVmerge(document);
     handleTableForeach(document);
     System.out.println("表格循环处理完成");
     handlePictureElement( document);
@@ -145,6 +152,101 @@ public class XMLConverter {
       element.getParent().remove(element);
     }
   }
+
+  /**
+   * 处理使用velocity的set语法
+   * @param document 文档对象
+   */
+  public static void handlePset(Document document) {
+    List<Element> setList = document.selectNodes("//*[local-name()='t' and contains(text(), '#p_set')]");
+    for(Element wt:setList) {
+      Element wp = (Element) wt.selectSingleNode("ancestor::w:p");
+      Element wpParent = wp.getParent();
+      int index = wpParent.indexOf(wp);
+      if(indexFitFlag) index = (index - 1) / 2;
+      Element set = DocumentHelper.createElement(TEMP_TAG);
+      String text = wt.getText().replace("p_", "");
+      set.setText(text);
+      wpParent.elements().add(index, set);
+      wpParent.remove(wp);
+    }
+  }
+  /**
+   * 处理使用velocity的if语法
+   * @param document 文档对象
+   */
+  public static void handlePif(Document document) {
+    StringBuffer pifBuffer = new StringBuffer();
+    pifBuffer.append("contains(text(),'#p_if')");
+    pifBuffer.append(" or contains(text(), '#p_elseif')");
+    pifBuffer.append(" or contains(text(), '#p_else')");
+    pifBuffer.append(" or contains(text(), '#p_end')");
+    List<Element> pifList = document.selectNodes("//*[local-name()='t' and ("+pifBuffer.toString()+")]");
+    for(Element wt:pifList) {
+      Element wp = (Element) wt.selectSingleNode("ancestor::w:p");
+      Element wpParent = wp.getParent();
+      int index = wpParent.indexOf(wp);
+      if(indexFitFlag) index = (index - 1) / 2;
+      Element pif = DocumentHelper.createElement(TEMP_TAG);
+      String text = wt.getText().replace("p_", "");
+      pif.setText(text);
+      wpParent.elements().add(index, pif);
+      wpParent.remove(wp);
+    }
+  }
+
+  /**
+   * 处理velocity的宏定义语法marco
+   * @param document 文档对象
+   */
+  public static void handleVelocityMacro(Document document) {
+    List<Element> marcoList = document.selectNodes("//*[local-name()='t' and contains(text(), '#macro')]");
+    for(Element wt:marcoList) {
+      Element wp = (Element) wt.selectSingleNode("ancestor::w:p");
+      Element wpParent = wp.getParent();
+      int index = wpParent.indexOf(wp);
+      if(indexFitFlag) index = (index - 1) / 2;
+      Element pif = DocumentHelper.createElement(TEMP_TAG);
+      String text = wt.getText();
+      pif.setText(text);
+      wpParent.elements().add(index, pif);
+      wpParent.remove(wp);
+    }
+  }
+
+  /**
+   * 处理table的行合并
+   * 模板中使用#vmerge(开始合并的条件)
+   * 下面代码自动将开始合并的条件放到#if中，如果满足则添加<w:vMerge w:val="restart"/>
+   * 如果不满足则添加<w:vMerge />
+   * @param document
+   */
+  public static void handleTableVmerge(Document document) {
+    List<Element> vmergeList = document.selectNodes("//*[local-name()='t' and contains(text(), '#vmerge')]");
+    for(Element wt:vmergeList) {
+      Element wp = (Element) wt.selectSingleNode("ancestor::w:p");
+      Element tc = (Element) wp.selectSingleNode("ancestor::w:tc");
+      String domainValue = wt.getText().replaceAll("^#vmerge\\(", "").replaceAll("\\)$", "");
+      Element vmerge = DocumentHelper.createElement(TEMP_TAG);
+      vmerge.setText("#if(" + domainValue + ")");
+      Element start = DocumentHelper.createElement("w:vMerge");
+      start.addAttribute("w:val", "restart");
+      Element velse = DocumentHelper.createElement(TEMP_TAG);
+      velse.setText("#else");
+      Element end = DocumentHelper.createElement("w:vMerge");
+      Element vend = DocumentHelper.createElement(TEMP_TAG);
+      vend.setText("#end");
+
+      vmerge.add(start);
+      vmerge.add(velse);
+      vmerge.add(end);
+      vmerge.add(vend);
+
+      tc.element("tcPr").elements().add(vmerge);
+      wp.detach();
+    }
+  }
+
   /**
    * 处理table中tr和tc级别的foreach循环
    * @param document 文档元素
@@ -175,9 +277,6 @@ public class XMLConverter {
     StringBuffer tcBuffer = new StringBuffer();
     tcBuffer.append("contains(text(),'#tbl_tc_foreach')");
     tcBuffer.append(" or contains(text(), '#tbl_tc_end')");
-    tcBuffer.append(" or contains(text(), '#tbl_tc_if')");
-    tcBuffer.append(" or contains(text(), '#tbl_tc_else')");
-    tcBuffer.append(" or contains(text(), '#tbl_tc_elseif')");
     List<Element> tcForeachList = document.selectNodes("//*[local-name()='t' and ("+tcBuffer.toString()+")]");
     for(Element wt:tcForeachList) {
       Element wp = (Element) wt.selectSingleNode("ancestor::w:p");
