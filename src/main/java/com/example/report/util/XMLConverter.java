@@ -1,5 +1,6 @@
 package com.example.report.util;
 
+import com.spire.doc.FileFormat;
 import org.dom4j.*;
 import org.dom4j.io.OutputFormat;
 import org.dom4j.io.SAXReader;
@@ -26,8 +27,16 @@ public class XMLConverter {
   public static final boolean indexFitFlag = false;
   public static void main(String[] args) throws Exception{
     System.out.println("XMLConverter");
+    String docxPath = "C:\\Users\\admin\\Desktop\\test\\ahello.docx";
     String sourcePath = "C:\\Users\\admin\\Desktop\\test\\ahello.xml";
     String targetPath = "C:\\Users\\admin\\Desktop\\test\\";
+
+    //加载模板
+    com.spire.doc.Document document = new com.spire.doc.Document();
+    document.loadFromFile(docxPath, FileFormat.Docx);
+    //将模板另存为xml
+    document.saveToFile(sourcePath, FileFormat.Word_Xml);
+
     convert(sourcePath, targetPath);
   }
   public static void convert(String sourcePath, String targetPath) throws Exception{
@@ -332,7 +341,9 @@ public class XMLConverter {
       docPrDescr.detach();
       // 将 pic:cNvPr 的 descr 属性删除
       Attribute piccNvPrDescr =inline.element("graphic").element("graphicData").element("pic").element("nvPicPr").element("cNvPr").attribute("descr");
-      piccNvPrDescr.detach();
+      if(piccNvPrDescr!=null) {
+        piccNvPrDescr.detach();
+      }
     }
   }
 
@@ -344,16 +355,20 @@ public class XMLConverter {
    * @param document 目标文档
    */
   public static void handlePictureForeach(Document document) {
-    List<Element> picForeachList = document.selectNodes("//*[namespace-uri()='http://schemas.openxmlformats.org/wordprocessingml/2006/main' and local-name()='t' and (contains(text(),'#pic_foreach') or contains(text(), '#pic_end'))]");
+    StringBuffer sb = new StringBuffer();
+    sb.append("namespace-uri()='http://schemas.openxmlformats.org/wordprocessingml/2006/main'");
+    sb.append(" and local-name()='t'");
+    sb.append(" and (contains(text(),'#pic_foreach') or contains(text(), '#pic_end'))");
+    List<Element> picForeachList = document.selectNodes("//*["+sb.toString()+"]");
     for (Element wt:picForeachList) {
       // 获取foreach标签内容
       String foreachContent = wt.getTextTrim();
       foreachContent = foreachContent.replace("pic_", "");
       // 找到w:p祖先元素
       Element wp = (Element) wt.selectSingleNode("ancestor::w:p");
-      // 如果是foreach，那么接下来找到w:p的下一个兄弟元素，就是放占位图片的
-      Element wpPic = (Element) wp.selectSingleNode("following-sibling::w:p");
-      if(wpPic != null) {
+      if(foreachContent.contains("foreach")) {
+        // 如果是foreach，那么接下来找到w:p的下一个兄弟元素，就是放占位图片的
+        Element wpPic = (Element) wp.selectSingleNode("following-sibling::w:p");
         // 获取foreach中item的内容
         String foreachItemContent = foreachContent.substring(foreachContent.indexOf("$"), foreachContent.indexOf("}") + 1);
         // 生成唯一id，用于关联w:drawing中rId---Relationship中Target---pkg:part中的binaryData

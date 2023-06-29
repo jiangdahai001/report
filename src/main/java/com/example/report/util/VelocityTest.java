@@ -79,7 +79,7 @@ public class VelocityTest {
     picBase64List.add(PictureData.getPicString2());
     ctx.put("picBase64List", picBase64List);
     // 表格合并数据
-    CancerInfo ci = new CancerInfo("brain", false, "", "", "a");
+    CancerInfo ci = new CancerInfo("brain", false, "mb", "", "a");
     ctx.put("ci", ci);
 
     // 输出
