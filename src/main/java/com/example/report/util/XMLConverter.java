@@ -35,17 +35,14 @@ public class XMLConverter {
     SAXReader reader = new SAXReader();
     Document document = reader.read(new File(sourcePath));
 
-    // 以下处理都是开发过程测试用的，最后可以合并在一起
     handleWfldSimpleElement(document);
     handleDividedDomain(document);
     System.out.println("普通文本处理完成");
-    handlePset(document);
-    handlePif(document);
-    handleVelocityMacro(document);
+    handleVelocityParagraphTag(document);
     handleTableVmerge(document);
     handleTableForeach(document);
     System.out.println("表格循环处理完成");
-    handlePictureElement( document);
+    handlePictureElement(document);
     System.out.println("图片处理完成");
     handlePictureForeach(document);
     document = removeTempTag(document);
@@ -152,68 +149,37 @@ public class XMLConverter {
       element.getParent().remove(element);
     }
   }
-
   /**
-   * 处理使用velocity的set语法
+   * 处理在独立段落中，使用velocity的set、if、foreach、macro等语法
+   * 前提是都是独立的段落中，即语法所在的父元素wp是后面要被移除的
    * @param document 文档对象
    */
-  public static void handlePset(Document document) {
-    List<Element> setList = document.selectNodes("//*[local-name()='t' and contains(text(), '#p_set')]");
-    for(Element wt:setList) {
-      Element wp = (Element) wt.selectSingleNode("ancestor::w:p");
-      Element wpParent = wp.getParent();
-      int index = wpParent.indexOf(wp);
-      if(indexFitFlag) index = (index - 1) / 2;
-      Element set = DocumentHelper.createElement(TEMP_TAG);
-      String text = wt.getText().replace("p_", "");
-      set.setText(text);
-      wpParent.elements().add(index, set);
-      wpParent.remove(wp);
-    }
-  }
-  /**
-   * 处理使用velocity的if语法
-   * @param document 文档对象
-   */
-  public static void handlePif(Document document) {
-    StringBuffer pifBuffer = new StringBuffer();
-    pifBuffer.append("contains(text(),'#p_if')");
-    pifBuffer.append(" or contains(text(), '#p_elseif')");
-    pifBuffer.append(" or contains(text(), '#p_else')");
-    pifBuffer.append(" or contains(text(), '#p_end')");
-    List<Element> pifList = document.selectNodes("//*[local-name()='t' and ("+pifBuffer.toString()+")]");
+  public static void handleVelocityParagraphTag(Document document) {
+    StringBuffer pBuffer = new StringBuffer();
+    // if 标签相关
+    pBuffer.append("contains(text(),'#p_if')");
+    pBuffer.append(" or contains(text(), '#p_elseif')");
+    pBuffer.append(" or contains(text(), '#p_else')");
+    pBuffer.append(" or contains(text(), '#p_end')");
+    // set 标签相关
+    pBuffer.append(" or contains(text(), '#p_set')");
+    // macro 标签相关
+    pBuffer.append(" or contains(text(), '#p_macro')");
+    // foreach 标签相关，p_end在上面if标签有了
+    pBuffer.append(" or contains(text(), '#p_foreach')");
+    List<Element> pifList = document.selectNodes("//*[local-name()='t' and ("+pBuffer.toString()+")]");
     for(Element wt:pifList) {
       Element wp = (Element) wt.selectSingleNode("ancestor::w:p");
       Element wpParent = wp.getParent();
       int index = wpParent.indexOf(wp);
       if(indexFitFlag) index = (index - 1) / 2;
-      Element pif = DocumentHelper.createElement(TEMP_TAG);
+      Element tmp = DocumentHelper.createElement(TEMP_TAG);
       String text = wt.getText().replace("p_", "");
-      pif.setText(text);
-      wpParent.elements().add(index, pif);
+      tmp.setText(text);
+      wpParent.elements().add(index, tmp);
       wpParent.remove(wp);
     }
   }
-
-  /**
-   * 处理velocity的宏定义语法marco
-   * @param document 文档对象
-   */
-  public static void handleVelocityMacro(Document document) {
-    List<Element> marcoList = document.selectNodes("//*[local-name()='t' and contains(text(), '#macro')]");
-    for(Element wt:marcoList) {
-      Element wp = (Element) wt.selectSingleNode("ancestor::w:p");
-      Element wpParent = wp.getParent();
-      int index = wpParent.indexOf(wp);
-      if(indexFitFlag) index = (index - 1) / 2;
-      Element pif = DocumentHelper.createElement(TEMP_TAG);
-      String text = wt.getText();
-      pif.setText(text);
-      wpParent.elements().add(index, pif);
-      wpParent.remove(wp);
-    }
-  }
-
   /**
    * 处理table的行合并
    * 模板中使用#vmerge(开始合并的条件)
