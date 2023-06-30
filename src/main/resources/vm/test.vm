@@ -1,0 +1,5 @@
+$date.getDate()
+$date.get('yyyy-M-d H:m:s')
+$date.format($now)
+$date.format("yyyy/MM/dd",$now)
+$math.sub(100,1)

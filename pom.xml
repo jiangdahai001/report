@@ -28,11 +28,24 @@
       <scope>test</scope>
     </dependency>
 
+<!--    <dependency>-->
+<!--      <groupId>org.apache.velocity</groupId>-->
+<!--      <artifactId>velocity</artifactId>-->
+<!--      <version>1.7</version>-->
+<!--    </dependency>-->
+    <!--velocity 的核心包-->
     <dependency>
       <groupId>org.apache.velocity</groupId>
-      <artifactId>velocity</artifactId>
-      <version>1.7</version>
+      <artifactId>velocity-engine-core</artifactId>
+      <version>2.2</version>
     </dependency>
+    <!--velocity 的工具包要使用人家工具包里面的api，就需要导入工具包-->
+    <dependency>
+      <groupId>org.apache.velocity.tools</groupId>
+      <artifactId>velocity-tools-generic</artifactId>
+      <version>3.0</version>
+    </dependency>
+
 
     <dependency>
       <groupId>dom4j</groupId>

@@ -6,6 +6,9 @@ import org.apache.velocity.VelocityContext;
 import org.apache.velocity.app.Velocity;
 import org.apache.velocity.app.VelocityEngine;
 import org.apache.velocity.runtime.RuntimeConstants;
+import org.apache.velocity.runtime.resource.loader.ClasspathResourceLoader;
+import org.apache.velocity.tools.ToolContext;
+import org.apache.velocity.tools.ToolManager;
 
 import java.io.*;
 import java.nio.charset.StandardCharsets;
@@ -21,9 +24,6 @@ public class VelocityTest {
   public static String TARGET_FILE = "ahello.doc";
   public static void main(String[] args) {
     System.out.println("hello, world, 你好！");
-//    String wt = "#vmerge($!{ci.apple})";
-//    String domainValue = wt.replaceAll("^#vmerge\\(", "").replaceAll("\\)$", "");
-//    System.out.println(domainValue);
     test();
   }
 
@@ -39,58 +39,56 @@ public class VelocityTest {
     System.out.println("word转xml成功");
   }
   public static void test() {
-    Properties p = new Properties();
-    // p.setProperty(Velocity.FILE_RESOURCE_LOADER_PATH, "");
-    p.setProperty(Velocity.ENCODING_DEFAULT, "UTF-8");
-    p.setProperty(Velocity.INPUT_ENCODING, "UTF-8");
-    p.setProperty(Velocity.OUTPUT_ENCODING, "UTF-8");
     // 初始化模板引擎
-    VelocityEngine ve = new VelocityEngine();
-    // 类路径
-//    ve.setProperty(RuntimeConstants.RESOURCE_LOADER, "classpath");
-//    ve.setProperty("classpath.resource.loader.class", ClasspathResourceLoader.class.getName());
-    // 绝对路径
-    ve.setProperty(RuntimeConstants.RESOURCE_LOADER, "file");
-    ve.setProperty(RuntimeConstants.FILE_RESOURCE_LOADER_PATH, TEST_PATH);
-    ve.init();
+    VelocityEngine engine = new VelocityEngine();
+    // 设置模板的加载路径，设置了两个加载路径
+    engine.setProperty(Velocity.RESOURCE_LOADERS,"class,file");
+    engine.setProperty(Velocity.RESOURCE_LOADER_CLASS, ClasspathResourceLoader.class.getName());
+    engine.setProperty(Velocity.FILE_RESOURCE_LOADER_PATH, TEST_PATH);
+    engine.init();
+    // 加载tools.xml配置文件
+    ToolManager toolManager = new ToolManager();
+    toolManager.configure("vm/tools.xml");
     // 获取模板文件
-    Template t = ve.getTemplate(XML_FILE);
+    Template template = engine.getTemplate(XML_FILE);
     // 设置变量
-    VelocityContext ctx = new VelocityContext();
-    ctx.put("greet", "Velocity");
+    ToolContext context = toolManager.createContext();
+
+    context.put("greet", "Velocity");
     List<String> geneList = new ArrayList<>();
     geneList.add("SZX");
     geneList.add("DBC");
     geneList.add("FLY");
     PatientInfo pi = new PatientInfo("张三", "13512341234", "男", 16, geneList);
-    ctx.put("pi", pi);
+    context.put("pi", pi);
+    context.put("geneList", geneList);
     List<PatientInfo> list = new ArrayList<>();
     list.add(new PatientInfo("lisi1", "13512345678", "male", 18, geneList));
     list.add(new PatientInfo("lisi2", "13512345678", "male", 18, geneList));
-    list.add(new PatientInfo("lisi3", "13512345678", "male", 18, geneList));
-    ctx.put("list", list);
+    list.add(new PatientInfo("lisi2", "13512345678", "male", 18, geneList));
+    context.put("list", list);
     List<CancerInfo> cancerList = new ArrayList<>();
     cancerList.add(new CancerInfo("lung", false, "", "", ""));
     cancerList.add(new CancerInfo("bone", true, "", "", ""));
-    ctx.put("cancerList", cancerList);
-    ctx.put("picBase64", PictureData.getPicString1());
+    context.put("cancerList", cancerList);
+    context.put("picBase64", PictureData.getPicString1());
     List<String> picBase64List = new ArrayList<>();
     picBase64List.add(PictureData.getPicString1());
     picBase64List.add(PictureData.getPicString2());
-    ctx.put("picBase64List", picBase64List);
+    context.put("picBase64List", picBase64List);
     // 表格合并数据
     CancerInfo ci = new CancerInfo("brain", false, "mb", "", "a");
-    ctx.put("ci", ci);
+    context.put("ci", ci);
 
     // 输出
 //    StringWriter sw = new StringWriter();
-//    t.merge(ctx, sw);
+//    t.merge(context, sw);
 //    System.out.println(sw.toString());
     File file = new File(TEST_PATH + TARGET_FILE);
     BufferedWriter bw = null;
     try {
       bw = new BufferedWriter(new OutputStreamWriter(new FileOutputStream(file), StandardCharsets.UTF_8));
-      t.merge(ctx, bw);
+      template.merge(context, bw);
       bw.flush();;
       bw.close();
     } catch(Exception e) {

@@ -191,17 +191,17 @@ public class XMLConverter {
   }
   /**
    * 处理table的行合并
-   * 模板中使用#vmerge(开始合并的条件)
+   * 模板中使用#tbl_vmerge(开始合并的条件)
    * 下面代码自动将开始合并的条件放到#if中，如果满足则添加<w:vMerge w:val="restart"/>
    * 如果不满足则添加<w:vMerge />
    * @param document
    */
   public static void handleTableVmerge(Document document) {
-    List<Element> vmergeList = document.selectNodes("//*[local-name()='t' and contains(text(), '#vmerge')]");
+    List<Element> vmergeList = document.selectNodes("//*[local-name()='t' and contains(text(), '#tbl_vmerge')]");
     for(Element wt:vmergeList) {
       Element wp = (Element) wt.selectSingleNode("ancestor::w:p");
       Element tc = (Element) wp.selectSingleNode("ancestor::w:tc");
-      String domainValue = wt.getText().replaceAll("^#vmerge\\(", "").replaceAll("\\)$", "");
+      String domainValue = wt.getText().replaceAll("^#tbl_vmerge\\(", "").replaceAll("\\)$", "");
       Element vmerge = DocumentHelper.createElement(TEMP_TAG);
       vmerge.setText("#if(" + domainValue + ")");
       Element start = DocumentHelper.createElement("w:vMerge");
@@ -236,6 +236,7 @@ public class XMLConverter {
     trBuffer.append(" or contains(text(), '#tbl_tr_if')");
     trBuffer.append(" or contains(text(), '#tbl_tr_else')");
     trBuffer.append(" or contains(text(), '#tbl_tr_elseif')");
+    trBuffer.append(" or contains(text(), '#tbl_tr_set')");
     List<Element> trForeachList = document.selectNodes("//*[local-name()='t' and ("+trBuffer.toString()+")]");
     for(Element wt:trForeachList) {
       Element tr = (Element) wt.selectSingleNode("ancestor::w:tr");
