@@ -43,19 +43,29 @@ public class XMLConverter {
     // 读取xml
     SAXReader reader = new SAXReader();
     Document document = reader.read(new File(sourcePath));
-
+    // 处理简单域元素
     handleWfldSimpleElement(document);
+    // 合并被拆分的域
     handleDividedDomain(document);
-    System.out.println("普通文本处理完成");
+    System.out.println("简单域、拆分域合并处理完成");
+    // 处理独立段落中velocity标签语法
     handleVelocityParagraphTag(document);
+    // 处理table中行合并
     handleTableVmerge(document);
+    // 处理table中列合并
+    handleTableGridSpan(document);
+    // 处理table中foreach循环
     handleTableForeach(document);
     System.out.println("表格循环处理完成");
+    // 处理占位图片
     handlePictureElement(document);
     System.out.println("图片处理完成");
+    // 处理图片循环
     handlePictureForeach(document);
+    // 移除临时标签，保留标签的text
     document = removeTempTag(document);
     System.out.println("临时标签处理完成");
+    // 保存新的xml文件
     writeXML(document, targetPath);
     System.out.println("保存xml完成");
   }
@@ -223,6 +233,42 @@ public class XMLConverter {
   }
 
   /**
+   * 处理table的列合并
+   * 模板中使用#tbl_grid_span(合并的列数)
+   * 如果列数大于1，则添加w:gridSpan元素，并配置w:val的值
+   * 如果列数为1，则不添加w:gridSpan
+   * 如果列数为0，则删除当前的tc
+   * @param document
+   */
+  public static void handleTableGridSpan(Document document) {
+    List<Element> gridSpanList = document.selectNodes("//*[local-name()='t' and contains(text(), '#tbl_grid_span')]");
+    for(Element wt:gridSpanList) {
+      Element wp = (Element) wt.selectSingleNode("ancestor::w:p");
+      Element tc = (Element) wp.selectSingleNode("ancestor::w:tc");
+      Element tr = (Element) tc.selectSingleNode("ancestor::w:tr");
+      String domainValue = wt.getText().replaceAll("^#tbl_grid_span\\(", "").replaceAll("\\)$", "");
+      Element tcPrefix = DocumentHelper.createElement(TEMP_TAG);
+      tcPrefix.setText("#set($tmp="+domainValue+") #set($val=$tmp.trim()) #if($number.toNumber($val) gt 0)");
+      wp.detach();
+      Element newTc = (Element) tc.clone();
+      Element tcSuffix = DocumentHelper.createElement(TEMP_TAG);
+      tcSuffix.setText("#end");
+
+      Element gridSpan = DocumentHelper.createElement("w:gridSpan");
+      gridSpan.addAttribute("w:val", "$!{val}");
+      newTc.element("tcPr").elements().add(gridSpan);
+
+      int index = tr.indexOf(tc);
+      if(indexFitFlag) index = (index - 1) / 2;
+      // 注意这里要先加后面的元素，因为index不变，是往前插入的
+      tr.elements().add(index, tcSuffix);
+      tr.elements().add(index, newTc);
+      tr.elements().add(index, tcPrefix);
+      tc.detach();
+    }
+  }
+
+  /**
    * 处理table中tr和tc级别的foreach循环
    * @param document 文档元素
    */
@@ -249,22 +295,6 @@ public class XMLConverter {
       tbl.elements().add(index, foreach);
       tbl.remove(tr);
     }
-    // 处理tc级别的foreach循环
-    StringBuffer tcBuffer = new StringBuffer();
-    tcBuffer.append("contains(text(),'#tbl_tc_foreach')");
-    tcBuffer.append(" or contains(text(), '#tbl_tc_end')");
-    List<Element> tcForeachList = document.selectNodes("//*[local-name()='t' and ("+tcBuffer.toString()+")]");
-    for(Element wt:tcForeachList) {
-      Element wp = (Element) wt.selectSingleNode("ancestor::w:p");
-      Element tc = (Element) wt.selectSingleNode("ancestor::w:tc");
-      int index = tc.indexOf(wp);
-      if(indexFitFlag) index = (index - 1) / 2;
-      Element foreach = DocumentHelper.createElement(TEMP_TAG);
-      String text = wt.getText().replace("tbl_tc_", "");
-      foreach.setText(text);
-      tc.elements().add(index, foreach);
-      tc.remove(wp);
-    }
     // 处理tc级别的行内foreach循环
     List<Element> tcInlineForeachList = document.selectNodes("//*[local-name()='t' and contains(text(), '#tbl_tc_inline_foreach')]");
     for(Element wt:tcInlineForeachList) {
@@ -279,6 +309,7 @@ public class XMLConverter {
         wp.elements().addAll(wrList);
         sibling.detach();
       }
+      // 将wr元素中，自己写的velocity语法使用临时标签包裹，后面再去掉临时标签，只保留text
       StringBuffer tcInlineBuffer = new StringBuffer();
       tcInlineBuffer.append("contains(text(),'#tbl_tc_inline_foreach')");
       tcInlineBuffer.append(" or contains(text(), '#tbl_tc_inline_end')");

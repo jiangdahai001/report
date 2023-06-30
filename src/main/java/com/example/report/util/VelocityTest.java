@@ -55,6 +55,7 @@ public class VelocityTest {
     ToolContext context = toolManager.createContext();
 
     context.put("greet", "Velocity");
+    context.put("greeting", "Velocity");
     List<String> geneList = new ArrayList<>();
     geneList.add("SZX");
     geneList.add("DBC");
