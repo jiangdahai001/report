@@ -57,11 +57,11 @@ public class XMLConverter {
     // 处理table中foreach循环
     handleTableForeach(document);
     System.out.println("表格循环处理完成");
-    // 处理占位图片
-    handlePictureElement(document);
-    System.out.println("图片处理完成");
-    // 处理图片循环
-    handlePictureForeach(document);
+//    // 处理占位图片
+//    handlePictureElement(document);
+//    System.out.println("图片处理完成");
+//    // 处理图片循环
+//    handlePictureForeach(document);
     // 移除临时标签，保留标签的text
     document = removeTempTag(document);
     System.out.println("临时标签处理完成");
@@ -300,29 +300,35 @@ public class XMLConverter {
     for(Element wt:tcInlineForeachList) {
       Element wp = (Element) wt.selectSingleNode("ancestor::w:p");
       List<Element> wpSiblingList = wp.selectNodes("following-sibling::w:p");
-      // 将所有wp后续的兄弟元素中的wr子元素都放到第一个wp中，其余的兄弟元素就可以detach了
+      // 将所有wp后续的兄弟元素中的wr子元素都放到第一个wp中，其余的wp兄弟元素就可以detach了，直到遇到#tbl_tc_inline_end_foreach
+      boolean endForeach = false;
       for(Element sibling:wpSiblingList) {
+        if("#tbl_tc_inline_end_foreach".equals(sibling.getStringValue())) {
+          endForeach = true;
+        }
         List<Element> wrList = sibling.selectNodes("descendant::w:r");
         wrList.forEach(wr -> {
           wr.detach();
         });
         wp.elements().addAll(wrList);
         sibling.detach();
+        if(endForeach) break;
       }
       // 将wr元素中，自己写的velocity语法使用临时标签包裹，后面再去掉临时标签，只保留text
       StringBuffer tcInlineBuffer = new StringBuffer();
       tcInlineBuffer.append("contains(text(),'#tbl_tc_inline_foreach')");
-      tcInlineBuffer.append(" or contains(text(), '#tbl_tc_inline_end')");
+      tcInlineBuffer.append(" or contains(text(), '#tbl_tc_inline_end_foreach')");
       tcInlineBuffer.append(" or contains(text(), '#tbl_tc_inline_if')");
       tcInlineBuffer.append(" or contains(text(), '#tbl_tc_inline_else')");
       tcInlineBuffer.append(" or contains(text(), '#tbl_tc_inline_elseif')");
+      tcInlineBuffer.append(" or contains(text(), '#tbl_tc_inline_end')");
       List<Element> wtList = wp.selectNodes("descendant::*[local-name()='t' and ("+tcInlineBuffer.toString()+")]");
       for(Element wt2:wtList) {
         Element wr = (Element) wt2.selectSingleNode("ancestor::w:r");
         int index = wp.indexOf(wr);
         if(indexFitFlag) index = (index - 1) / 2;
         Element foreach = DocumentHelper.createElement(TEMP_TAG);
-        String text = wt2.getText().replace("tbl_tc_inline_", "");
+        String text = wt2.getText().replaceAll("^#tbl_tc_inline_", "#").replaceAll("_foreach$", "");
         foreach.setText(text);
         wp.elements().add(index, foreach);
         wp.remove(wr);
