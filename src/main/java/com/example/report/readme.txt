@@ -42,7 +42,10 @@ false: 在w:tc的w:tcPr中加入<w:vMerge/>
 5，将前面 wp:docPr 的descr属性删除，将pic:cNvPr 的descr属性删除
 
 ## foreach图片
-#pic_foreach, #pic_end 处理图片foreach循环
-思路：找到#pic_foreach, #pic_end标签，紧跟在#pic_foreach所在的w:p之后的w:p兄弟元素就是图片元素
+#pic_foreach, #pic_end 处理换行图片foreach循环
+#pic_inline_foreach, #pic_inline_end 处理行内图片foreach循环
+思路：找到#pic_foreach, #pic_end, #pic_inline_foreach, #pic_inline_end标签，紧跟在#foreach所在的w:p之后的w:p兄弟元素就是图片元素
 替换图片元素中的rId内容，引入$!{foreach.index}实现图片数量的动态变化
 新增Relationship及pkg:part，同样引入$!{foreach.index}实现图片数量的动态变化
+换行循环在图片的wp元素前后加foreach, end语法
+行内循环在图片的wp元素内部加foreach, end语法
