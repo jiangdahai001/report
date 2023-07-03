@@ -61,11 +61,11 @@ public class XMLConverter {
     System.out.println("表格循环处理完成");
     // 处理table中cell的背景色
     handleTableTcShading(document);
-//    // 处理占位图片
-//    handlePictureElement(document);
-//    System.out.println("图片处理完成");
-//    // 处理图片循环
-//    handlePictureForeach(document);
+    // 处理占位图片
+    handlePictureElement(document);
+    // 处理图片循环
+    handlePictureForeach(document);
+    System.out.println("图片处理完成");
     // 移除临时标签，保留标签的text
     document = removeTempTag(document);
     System.out.println("临时标签处理完成");
@@ -215,7 +215,7 @@ public class XMLConverter {
     for(Element wt:vmergeList) {
       Element wp = (Element) wt.selectSingleNode("ancestor::w:p");
       Element tc = (Element) wp.selectSingleNode("ancestor::w:tc");
-      String domainValue = wt.getText().replaceAll("^#tbl_vmerge\\(", "").replaceAll("\\)$", "");
+      String domainValue = wt.getText().replaceAll("^#tbl_vmerge\\(|\\)$", "");
       Element vmerge = DocumentHelper.createElement(TEMP_TAG);
       vmerge.setText("#if(" + domainValue + ")");
       Element start = DocumentHelper.createElement("w:vMerge");
@@ -250,7 +250,7 @@ public class XMLConverter {
       Element wp = (Element) wt.selectSingleNode("ancestor::w:p");
       Element tc = (Element) wp.selectSingleNode("ancestor::w:tc");
       Element tr = (Element) tc.selectSingleNode("ancestor::w:tr");
-      String domainValue = wt.getText().replaceAll("^#tbl_grid_span\\(", "").replaceAll("\\)$", "");
+      String domainValue = wt.getText().replaceAll("^#tbl_grid_span\\(|\\)$", "");
       Element tcPrefix = DocumentHelper.createElement(TEMP_TAG);
       tcPrefix.setText("#set($tmp="+domainValue+") #set($val=$tmp.trim()) #if($number.toNumber($val) gt 0)");
       wp.detach();
@@ -429,19 +429,25 @@ public class XMLConverter {
    */
   public static void handlePictureForeach(Document document) {
     StringBuffer sb = new StringBuffer();
-    sb.append("namespace-uri()='http://schemas.openxmlformats.org/wordprocessingml/2006/main'");
-    sb.append(" and local-name()='t'");
-    sb.append(" and (contains(text(),'#pic_foreach') or contains(text(), '#pic_end'))");
-    List<Element> picForeachList = document.selectNodes("//*["+sb.toString()+"]");
+    sb.append("contains(text(),'#pic_foreach')");
+    sb.append(" or contains(text(), '#pic_end')");
+    sb.append(" or contains(text(), '#pic_inline_foreach')");
+    sb.append(" or contains(text(), '#pic_inline_end')");
+    List<Element> picForeachList = document.selectNodes("//*[namespace-uri()='http://schemas.openxmlformats.org/wordprocessingml/2006/main' and local-name()='t' and ("+sb.toString()+")]");
     for (Element wt:picForeachList) {
       // 获取foreach标签内容
       String foreachContent = wt.getTextTrim();
-      foreachContent = foreachContent.replace("pic_", "");
+      boolean inline = false;
+      if(foreachContent.contains("inline")) {
+        inline = true;
+      }
+      foreachContent = foreachContent.replaceAll("^#pic_inline_|^#pic_", "#");
       // 找到w:p祖先元素
       Element wp = (Element) wt.selectSingleNode("ancestor::w:p");
+      Element wpPic = null;
       if(foreachContent.contains("foreach")) {
         // 如果是foreach，那么接下来找到w:p的下一个兄弟元素，就是放占位图片的
-        Element wpPic = (Element) wp.selectSingleNode("following-sibling::w:p");
+        wpPic = (Element) wp.selectSingleNode("following-sibling::w:p");
         // 获取foreach中item的内容
         String foreachItemContent = foreachContent.substring(foreachContent.indexOf("$"), foreachContent.indexOf("}") + 1);
         // 生成唯一id，用于关联w:drawing中rId---Relationship中Target---pkg:part中的binaryData
@@ -485,13 +491,31 @@ public class XMLConverter {
         pkgPackage.elements().add(pkgPartForeachContent);
         pkgPackage.elements().add(pkgPartForeachEnd);
       }
-      // 将w:p祖先元素替换成临时标签元素
-      int index = wp.getParent().indexOf(wp);
-      if(indexFitFlag) index = (index - 1) / 2;
-      Element tmp = DocumentHelper.createElement(TEMP_TAG);
-      String text = wt.getText().replace("pic_", "");
-      tmp.setText(text);
-      wp.getParent().elements().add(index, tmp);
+      if(inline) {
+        // 如果是行内循环，就将临时标签放到pic所在的w:p元素中，foreach放在w:pPr后面，end放在最后
+        Element tmp = DocumentHelper.createElement(TEMP_TAG);
+        String text = wt.getText().replaceAll("^#pic_inline_", "#");
+        tmp.setText(text);
+        if(text.contains("foreach")) {
+          // 如果是pic_inline_foreach，则将foreach语句放到图片所在w:p的w:pPr后面
+          int index = wpPic.indexOf(wpPic.element("pPr"));
+          if(indexFitFlag) index = (index - 1) / 2;
+          wpPic = (Element) wp.selectSingleNode("following-sibling::w:p");
+          wpPic.elements().add(index + 1, tmp);
+        } else {
+          // 如果是pic_inline_end，则将end语句放到图片所在w:p的最后即可
+          wpPic = (Element) wp.selectSingleNode("preceding-sibling::w:p[1]");
+          wpPic.elements().add(tmp);
+        }
+      } else {
+        // 将w:p祖先元素替换成临时标签元素
+        int index = wp.getParent().indexOf(wp);
+        if(indexFitFlag) index = (index - 1) / 2;
+        Element tmp = DocumentHelper.createElement(TEMP_TAG);
+        String text = wt.getText().replaceAll("^#pic_", "#");
+        tmp.setText(text);
+        wp.getParent().elements().add(index, tmp);
+      }
       wp.detach();
     }
   }
