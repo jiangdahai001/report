@@ -17,17 +17,20 @@
 前提是都是独立的段落中，即语法所在的父元素wp是后面要被移除的
 
 ## 表格行合并
-#tbl_vmerge(val)
-参数为是否开始行合并，
+#tbl_vmerge(val), 参数为是否开始行合并
 true: 则在w:tc的w:tcPr中加入<w:vMerge w:val="restart"/>
 false: 在w:tc的w:tcPr中加入<w:vMerge/>
 
 ## 表格合并列
-#tbl_grid_span(val)
-参数为跨越的列数，注意：参数必须是字符串类型
+#tbl_grid_span(val), 参数为跨越的列数，注意：参数必须是字符串类型
 如果列数大于1，则添加w:gridSpan元素，并配置w:val的值
 如果列数为1，则不添加w:gridSpan
 如果列数为0，则删除当前的tc
+
+## 表格中tc的shading设置
+#tbl_tc_shading(val), val 为颜色值，例如C9C9C9
+注意如果使用$render.eval，则返回值不能有引号
+如果val直接为颜色值，则需要用引号包裹
 
 ## 占位图片
 处理占位图片元素，

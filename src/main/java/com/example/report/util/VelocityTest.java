@@ -24,6 +24,9 @@ public class VelocityTest {
   public static String TARGET_FILE = "ahello.doc";
   public static void main(String[] args) {
     System.out.println("hello, world, 你好！");
+//    String a = "C9C9C9";
+//    String b = a.replaceAll("\"", "");
+//    System.out.println(b);
     test();
   }
 

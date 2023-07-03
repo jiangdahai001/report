@@ -59,6 +59,8 @@ public class XMLConverter {
     // 处理table中foreach循环
     handleTableForeach(document);
     System.out.println("表格循环处理完成");
+    // 处理table中cell的背景色
+    handleTableTcShading(document);
 //    // 处理占位图片
 //    handlePictureElement(document);
 //    System.out.println("图片处理完成");
@@ -299,6 +301,30 @@ public class XMLConverter {
     }
   }
 
+  /**
+   * 处理table中tc的shading设置
+   * 模板中语法:#tbl_tc_shading(val), val 为颜色值，例如C9C9C9
+   * 注意如果使用$render.eval，则返回值不能有引号
+   * 如果val直接为颜色值，则需要用引号包裹
+   * @param document 文档元素
+   */
+  public static void handleTableTcShading(Document document) {
+    List<Element> tcShadingList = document.selectNodes("//*[local-name()='t' and contains(text(), '#tbl_tc_shading')]");
+    for(Element wt:tcShadingList) {
+      Element wp = (Element) wt.selectSingleNode("ancestor::w:p");
+      Element tc = (Element) wp.selectSingleNode("ancestor::w:tc");
+      String wtFill = wt.getText().replaceAll("^#tbl_tc_shading\\(|\\)$", "");
+      Element shdPrefix = DocumentHelper.createElement(TEMP_TAG);
+      shdPrefix.setText("#set($fill="+wtFill+")");
+      Element shd = DocumentHelper.createElement("w:shd");
+      shd.addAttribute("w:color", "auto");
+      shd.addAttribute("w:fill","$!{fill}");
+      shd.addAttribute("w:val", "clear");
+      tc.element("tcPr").elements().add(shdPrefix);
+      tc.element("tcPr").elements().add(shd);
+      wp.detach();
+    }
+  }
   /**
    * 处理段落中的行内循环
    * @param document 文档元素
