@@ -13,8 +13,12 @@
 <w:fldChar w:fldCharType="end" />
 
 ## velocity一般语法
-处理在独立段落中，使用velocity的set、if、foreach、macro等语法
+处理在模板中，使用velocity的set、if、foreach、macro等语法
+#p_if, #p_elseif, #p_else, #p_end, #p_set, #p_macro, #p_foreach
 前提是都是独立的段落中，即语法所在的父元素wp是后面要被移除的
+#inline_if, #inline_elseif, #inline_else, #inline_end, #inline_set, #inline_macro, #inline_foreach
+前提是都是段落行内中，即语法所在的父元素wr是后面要被移除的
+注意：#p开头的标签是要单独写一行的，#inline开头的标签是同其他内容写在同一行内的
 
 ## 表格行合并
 #tbl_vmerge(val), 参数为是否开始行合并

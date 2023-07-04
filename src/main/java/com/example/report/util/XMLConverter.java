@@ -50,6 +50,7 @@ public class XMLConverter {
     System.out.println("简单域、拆分域合并处理完成");
     // 处理独立段落中velocity标签语法
     handleVelocityParagraphTag(document);
+    // 处理段落中行内velocity标签语法
     handleVelocityInlineTag(document);
     // 处理段落的行内循环
     handleInlineForeach(document);
@@ -175,19 +176,19 @@ public class XMLConverter {
    * @param document 文档对象
    */
   public static void handleVelocityParagraphTag(Document document) {
-    StringBuffer pBuffer = new StringBuffer();
+    StringBuffer sb = new StringBuffer();
     // if 标签相关
-    pBuffer.append("contains(text(),'#p_if')");
-    pBuffer.append(" or contains(text(), '#p_elseif')");
-    pBuffer.append(" or contains(text(), '#p_else')");
-    pBuffer.append(" or contains(text(), '#p_end')");
+    sb.append("contains(text(),'#p_if')");
+    sb.append(" or contains(text(), '#p_elseif')");
+    sb.append(" or contains(text(), '#p_else')");
+    sb.append(" or contains(text(), '#p_end')");
     // set 标签相关
-    pBuffer.append(" or contains(text(), '#p_set')");
+    sb.append(" or contains(text(), '#p_set')");
     // macro 标签相关
-    pBuffer.append(" or contains(text(), '#p_macro')");
+    sb.append(" or contains(text(), '#p_macro')");
     // foreach 标签相关，p_end在上面if标签有了
-    pBuffer.append(" or contains(text(), '#p_foreach')");
-    List<Element> pifList = document.selectNodes("//*[local-name()='t' and ("+pBuffer.toString()+")]");
+    sb.append(" or contains(text(), '#p_foreach')");
+    List<Element> pifList = document.selectNodes("//*[local-name()='t' and ("+sb.toString()+")]");
     for(Element wt:pifList) {
       Element wp = (Element) wt.selectSingleNode("ancestor::w:p");
       Element wpParent = wp.getParent();
@@ -238,7 +239,7 @@ public class XMLConverter {
    * 模板中使用#tbl_vmerge(开始合并的条件)
    * 下面代码自动将开始合并的条件放到#if中，如果满足则添加<w:vMerge w:val="restart"/>
    * 如果不满足则添加<w:vMerge />
-   * @param document
+   * @param document 文档元素
    */
   public static void handleTableVmerge(Document document) {
     List<Element> vmergeList = document.selectNodes("//*[local-name()='t' and contains(text(), '#tbl_vmerge')]");
@@ -272,7 +273,7 @@ public class XMLConverter {
    * 如果列数大于1，则添加w:gridSpan元素，并配置w:val的值
    * 如果列数为1，则不添加w:gridSpan
    * 如果列数为0，则删除当前的tc
-   * @param document
+   * @param document 文档元素
    */
   public static void handleTableGridSpan(Document document) {
     List<Element> gridSpanList = document.selectNodes("//*[local-name()='t' and contains(text(), '#tbl_grid_span')]");
@@ -310,14 +311,14 @@ public class XMLConverter {
     // 处理tr级别的foreach循环
     // tbl_tr_foreach, tbl_tr_end
     // tbl_tr_if, tbl_tr_else, tbl_tr_elseif, tbl_tr_end
-    StringBuffer trBuffer = new StringBuffer();
-    trBuffer.append("contains(text(),'#tbl_tr_foreach')");
-    trBuffer.append(" or contains(text(), '#tbl_tr_end')");
-    trBuffer.append(" or contains(text(), '#tbl_tr_if')");
-    trBuffer.append(" or contains(text(), '#tbl_tr_else')");
-    trBuffer.append(" or contains(text(), '#tbl_tr_elseif')");
-    trBuffer.append(" or contains(text(), '#tbl_tr_set')");
-    List<Element> trForeachList = document.selectNodes("//*[local-name()='t' and ("+trBuffer.toString()+")]");
+    StringBuffer sb = new StringBuffer();
+    sb.append("contains(text(),'#tbl_tr_foreach')");
+    sb.append(" or contains(text(), '#tbl_tr_end')");
+    sb.append(" or contains(text(), '#tbl_tr_if')");
+    sb.append(" or contains(text(), '#tbl_tr_else')");
+    sb.append(" or contains(text(), '#tbl_tr_elseif')");
+    sb.append(" or contains(text(), '#tbl_tr_set')");
+    List<Element> trForeachList = document.selectNodes("//*[local-name()='t' and ("+sb.toString()+")]");
     for(Element wt:trForeachList) {
       Element tr = (Element) wt.selectSingleNode("ancestor::w:tr");
       Element tbl = (Element) wt.selectSingleNode("ancestor::w:tbl");
@@ -357,6 +358,8 @@ public class XMLConverter {
   }
   /**
    * 处理段落中的行内循环
+   * #p开头的标签是要单独写一行的
+   * #inline开头的标签是同其他内容写在同一行内的
    * @param document 文档元素
    */
   public static void handleInlineForeach(Document document) {
@@ -372,7 +375,7 @@ public class XMLConverter {
         if("#p_inline_end_foreach".equals(sibling.getStringValue())) {
           endForeach = true;
         }
-        List<Element> wrList = sibling.selectNodes("descendant::w:r|descendant::geneplus_placeholder");
+        List<Element> wrList = sibling.selectNodes("descendant::w:r|descendant::"+TEMP_TAG+"");
         wrList.forEach(wr -> {
           wr.detach();
         });
