@@ -482,8 +482,9 @@ public class XMLConverter {
       Element wp = (Element) wt.selectSingleNode("ancestor::w:p");
       Element wpPic = null;
       if(foreachContent.contains("foreach")) {
-        // 如果是foreach，那么接下来找到w:p的下一个兄弟元素，就是放占位图片的
-        wpPic = (Element) wp.selectSingleNode("following-sibling::w:p");
+        // 如果是foreach，那么接下来找到w:p的下一个包含w:drawing元素的兄弟元素，就是放占位图片的
+        Element wDrawing = (Element) wp.selectSingleNode("following-sibling::w:p//w:drawing");
+        wpPic = (Element) wDrawing.selectSingleNode("ancestor::w:p");
         // 获取foreach中item的内容
         String foreachItemContent = foreachContent.substring(foreachContent.indexOf("$"), foreachContent.indexOf("}") + 1);
         // 生成唯一id，用于关联w:drawing中rId---Relationship中Target---pkg:part中的binaryData
