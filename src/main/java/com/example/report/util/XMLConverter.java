@@ -50,6 +50,7 @@ public class XMLConverter {
     System.out.println("简单域、拆分域合并处理完成");
     // 处理独立段落中velocity标签语法
     handleVelocityParagraphTag(document);
+    handleVelocityInlineTag(document);
     // 处理段落的行内循环
     handleInlineForeach(document);
     // 处理table中行合并
@@ -120,40 +121,36 @@ public class XMLConverter {
    * @param document 文档元素
    */
   public static void handleDividedDomain(Document document) {
+//    List<Element> beginList = document.selectNodes("//*[local-name()='fldChar' and @fldCharType='begin']");
     List<Element> beginList = document.selectNodes("//*[local-name()='fldChar']");
-    for(Element element:beginList) {
-      if("begin".equals(element.attributeValue("fldCharType"))) {
-        Element wp = (Element) element.selectSingleNode("ancestor::w:p");
-        Element wr = (Element) element.selectSingleNode("ancestor::w:r");
+    for(Element wt:beginList) {
+      if("begin".equals(wt.attributeValue("fldCharType"))) {
+        Element wr = (Element) wt.selectSingleNode("ancestor::w:r");
+        Element wrParent = wr.getParent();
         Element domainElement = null;
         // 注意：这里的Element.indexOf获取的索引和Element.elements()获取的list的索引不能一一对应，目前看是x=(n-1)/2
-        int indexStart = wp.indexOf(wr);
-        if(indexFitFlag) indexStart = (indexStart - 1)/2;
-        int indexEnd = 0;
+        int index = wrParent.indexOf(wr);
+        if (indexFitFlag) index = (index - 1) / 2;
         StringBuffer domainValue = new StringBuffer();
-        // 找到分割域的起始和结束的索引，并将所有索引内容拼接到一起
-        for (int i = indexStart; i < wp.elements().size(); i++) {
-          Element el = (Element) wp.elements().get(i);
-          if (el.element("t") != null) {
-            domainValue.append(el.element("t").getTextTrim());
+        List<Element> domainList = wr.selectNodes("following-sibling::w:r");
+        for (Element domain : domainList) {
+          domain.detach();
+          if (domain.element("t") != null) {
+            domainValue.append(domain.element("t").getTextTrim());
             if (domainElement == null) {
-              domainElement = (Element) el.clone();
+              domainElement = (Element) domain.clone();
             }
           }
-          if (el.element("fldChar") != null) {
-            if ("end".equals(el.element("fldChar").attributeValue("fldCharType"))) {
-              indexEnd = i;
+          if (domain.element("fldChar") != null) {
+            if ("end".equals(domain.element("fldChar").attributeValue("fldCharType"))) {
               break;
             }
           }
         }
-        // 删除分割的域内容
-        for (int i = indexEnd; i >= indexStart; i--) {
-          ((Element) wp.elements().get(i)).detach();
-        }
         // 在之前分割域开始的位置加上新的拼接好的域元素
         domainElement.element("t").setText(domainValue.toString());
-        wp.elements().add(indexStart, domainElement);
+        wrParent.elements().add(index, domainElement);
+        wr.detach();
       }
     }
   }
@@ -197,12 +194,45 @@ public class XMLConverter {
       int index = wpParent.indexOf(wp);
       if(indexFitFlag) index = (index - 1) / 2;
       Element tmp = DocumentHelper.createElement(TEMP_TAG);
-      String text = wt.getText().replace("p_", "");
+      String text = wt.getText().replaceAll("^#p_", "#");
       tmp.setText(text);
       wpParent.elements().add(index, tmp);
       wpParent.remove(wp);
     }
   }
+
+  /**
+   * 处理在段落行内中，使用velocity的set、if、foreach、macro等语法
+   * 前提是都是段落行内中，即语法所在的父元素wr是后面要被移除的
+   * @param document 文档对象
+   */
+  public static void handleVelocityInlineTag(Document document) {
+    StringBuffer sb = new StringBuffer();
+    // if 标签相关
+    sb.append("contains(text(),'#inline_if')");
+    sb.append(" or contains(text(), '#inline_elseif')");
+    sb.append(" or contains(text(), '#inline_else')");
+    sb.append(" or contains(text(), '#inline_end')");
+    // set 标签相关
+    sb.append(" or contains(text(), '#inline_set')");
+    // macro 标签相关
+    sb.append(" or contains(text(), '#inline_macro')");
+    // foreach 标签相关，inline_end在上面if标签有了
+    sb.append(" or contains(text(), '#inline_foreach')");
+    List<Element> elementList = document.selectNodes("//*[local-name()='t' and ("+sb.toString()+")]");
+    for(Element wt:elementList) {
+      Element wr = (Element) wt.selectSingleNode("ancestor::w:r");
+      Element wrParent = wr.getParent();
+      int index = wrParent.indexOf(wr);
+      if(indexFitFlag) index = (index - 1) / 2;
+      Element tmp = DocumentHelper.createElement(TEMP_TAG);
+      String text = wt.getText().replaceAll("^#inline_", "#");
+      tmp.setText(text);
+      wrParent.elements().add(index, tmp);
+      wrParent.remove(wr);
+    }
+  }
+
   /**
    * 处理table的行合并
    * 模板中使用#tbl_vmerge(开始合并的条件)
@@ -294,7 +324,7 @@ public class XMLConverter {
       int index = tbl.indexOf(tr);
       if(indexFitFlag) index = (index - 1) / 2;
       Element foreach = DocumentHelper.createElement(TEMP_TAG);
-      String text = wt.getText().replace("tbl_tr_", "");
+      String text = wt.getText().replaceAll("^#tbl_tr_", "#");
       foreach.setText(text);
       tbl.elements().add(index, foreach);
       tbl.remove(tr);
@@ -330,18 +360,19 @@ public class XMLConverter {
    * @param document 文档元素
    */
   public static void handleInlineForeach(Document document) {
-    // 处理tc级别的行内foreach循环
-    List<Element> tcInlineForeachList = document.selectNodes("//*[local-name()='t' and contains(text(), '#p_inline_foreach')]");
-    for(Element wt:tcInlineForeachList) {
+    // 处理行内foreach循环
+    List<Element> inlineForeachList = document.selectNodes("//*[local-name()='t' and contains(text(), '#p_inline_foreach')]");
+    for(Element wt:inlineForeachList) {
       Element wp = (Element) wt.selectSingleNode("ancestor::w:p");
       List<Element> wpSiblingList = wp.selectNodes("following-sibling::w:p");
       // 将所有wp后续的兄弟元素中的wr子元素都放到第一个wp中，其余的wp兄弟元素就可以detach了，直到遇到#p_inline_end_foreach
+      // 如果有临时元素也要放到第一个wp中，
       boolean endForeach = false;
       for(Element sibling:wpSiblingList) {
         if("#p_inline_end_foreach".equals(sibling.getStringValue())) {
           endForeach = true;
         }
-        List<Element> wrList = sibling.selectNodes("descendant::w:r");
+        List<Element> wrList = sibling.selectNodes("descendant::w:r|descendant::geneplus_placeholder");
         wrList.forEach(wr -> {
           wr.detach();
         });
