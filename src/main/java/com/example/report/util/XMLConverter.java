@@ -67,6 +67,7 @@ public class XMLConverter {
     handlePictureElement(document);
     // 处理图片循环
     handlePictureForeach(document);
+    handleMultiPictureForeach(document);
     System.out.println("图片处理完成");
     // 移除临时标签，保留标签的text
     document = removeTempTag(document);
@@ -447,16 +448,15 @@ public class XMLConverter {
       Attribute docPrDescr = element.attribute("descr");
       docPrDescr.detach();
       // 将 pic:cNvPr 的 descr 属性删除
-      Attribute piccNvPrDescr =inline.element("graphic").element("graphicData").element("pic").element("nvPicPr").element("cNvPr").attribute("descr");
-      if(piccNvPrDescr!=null) {
-        piccNvPrDescr.detach();
-      }
+      Element piccNvPr = (Element)inline.selectSingleNode("descendant::*[namespace-uri()='http://schemas.openxmlformats.org/drawingml/2006/picture' and local-name()='cNvPr']");
+      Attribute piccNvPrDescr = piccNvPr.attribute("descr");
+      if(piccNvPrDescr!=null) piccNvPrDescr.detach();
     }
   }
 
   /**
    * 处理图片foreach循环
-   * 找到#pic_foreach, #pic_end, #pic_inline_foreach, #pic_inline_end标签，紧跟在#foreach所在的w:p之后的w:p兄弟元素就是图片元素
+   * 找到#pic_foreach, #pic_end, #pic_inline_foreach, #pic_inline_end标签，紧跟在#foreach所在的w:p之后的包含w:drawing的w:p兄弟元素就是图片元素
    * 替换图片元素中的rId内容，引入$!{foreach.index}实现图片数量的动态变化
    * 新增Relationship及pkg:part，同样引入$!{foreach.index}实现图片数量的动态变化
    * 换行循环在图片的wp元素前后加foreach, end语法
@@ -487,46 +487,7 @@ public class XMLConverter {
         wpPic = (Element) wDrawing.selectSingleNode("ancestor::w:p");
         // 获取foreach中item的内容
         String foreachItemContent = foreachContent.substring(foreachContent.indexOf("$"), foreachContent.indexOf("}") + 1);
-        // 生成唯一id，用于关联w:drawing中rId---Relationship中Target---pkg:part中的binaryData
-        String uuid = UUID.randomUUID().toString().replace("-","");
-        Element blip = (Element) wpPic.selectSingleNode("descendant::*[namespace-uri()='http://schemas.openxmlformats.org/drawingml/2006/main' and local-name()='blip']");
-        blip.addAttribute("embed", "rId_" + uuid + "_$!{foreach.index}");
-        // 新增Relationship循环开始标签
-        Element relationshipForeachBegin = DocumentHelper.createElement(TEMP_TAG);
-        relationshipForeachBegin.setText(foreachContent);
-        // 新增Relationship循环内容标签
-        Element relationshipForeachContent = DocumentHelper.createElement(QName.get("Relationship", "http://schemas.openxmlformats.org/package/2006/relationships"));
-        relationshipForeachContent.addAttribute("Id", "rId_" + uuid + "_$!{foreach.index}");
-        relationshipForeachContent.addAttribute("Type", "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image");
-        relationshipForeachContent.addAttribute("Target", "media/image_"+uuid+"_$!{foreach.index}.png");
-        // 新增Relationship循环结束标签
-        Element relationshipForeachEnd = DocumentHelper.createElement(TEMP_TAG);
-        relationshipForeachEnd.setText("#end");
-        // 将Relationship循环标签添加到Relationships中
-        Element pkgPart = (Element) document.selectSingleNode("//*[namespace-uri()='http://schemas.microsoft.com/office/2006/xmlPackage' and local-name()='part' and @pkg:name='/word/_rels/document.xml.rels']");
-        Element relationships = (Element) pkgPart.selectSingleNode("descendant::*[namespace-uri()='http://schemas.openxmlformats.org/package/2006/relationships' and local-name()='Relationships']");
-        relationships.elements().add(relationshipForeachBegin);
-        relationships.elements().add(relationshipForeachContent);
-        relationships.elements().add(relationshipForeachEnd);
-        // 新增pkg:part标签开始标签
-        Element pkgPartForeachBegin = DocumentHelper.createElement(TEMP_TAG);
-        pkgPartForeachBegin.setText(foreachContent);
-        // 新增pkg:part循环内容标签
-        Element pkgPartForeachContent = DocumentHelper.createElement("pkg:part");
-        pkgPartForeachContent.addAttribute("pkg:name", "/word/media/image_"+uuid+"_$!{foreach.index}.png");
-        pkgPartForeachContent.addAttribute("pkg:contentType", "image/png");
-        pkgPartForeachContent.addAttribute("pkg:compression", "store");
-        Element binaryData = DocumentHelper.createElement("pkg:binaryData");
-        binaryData.setText(foreachItemContent);
-        pkgPartForeachContent.add(binaryData);
-        // 新增pkg:part循环结束标签
-        Element pkgPartForeachEnd = DocumentHelper.createElement(TEMP_TAG);
-        pkgPartForeachEnd.setText("#end");
-        // 将pkg:part循环标签添加到pkg:package中
-        Element pkgPackage = (Element) document.selectSingleNode("//*[namespace-uri()='http://schemas.microsoft.com/office/2006/xmlPackage' and local-name()='package']");
-        pkgPackage.elements().add(pkgPartForeachBegin);
-        pkgPackage.elements().add(pkgPartForeachContent);
-        pkgPackage.elements().add(pkgPartForeachEnd);
+        addPictureElement(document, wDrawing, foreachContent, foreachItemContent);
       }
       if(inline) {
         // 如果是行内循环，就将临时标签放到pic所在的w:p元素中，foreach放在w:pPr后面，end放在最后
@@ -555,5 +516,124 @@ public class XMLConverter {
       }
       wp.detach();
     }
+  }
+
+  /**
+   * 处理单行多图片foreach循环
+   * 找到#pic_multi_foreach, #pic_multi_end, #pic_inline_multi_foreach, #pic_inline_multi_end标签，紧跟在#foreach所在的w:p之后的包含w:drawing的w:p兄弟元素就是图片元素
+   * 替换图片元素中的rId内容，引入$!{foreach.index}实现图片数量的动态变化
+   * 新增Relationship及pkg:part，同样引入$!{foreach.index}实现图片数量的动态变化
+   * 换行循环在图片的wp元素前后加foreach, end语法
+   * 行内循环在图片的wp元素内部加foreach, end语法
+   * @param document 文档元素
+   */
+  public static void handleMultiPictureForeach(Document document) {
+    StringBuffer sb = new StringBuffer();
+    sb.append("contains(text(),'#pic_multi_foreach')");
+    sb.append(" or contains(text(), '#pic_multi_end')");
+    sb.append(" or contains(text(), '#pic_inline_multi_foreach')");
+    sb.append(" or contains(text(), '#pic_inline_multi_end')");
+    List<Element> picForeachList = document.selectNodes("//*[namespace-uri()='http://schemas.openxmlformats.org/wordprocessingml/2006/main' and local-name()='t' and ("+sb.toString()+")]");
+    for (Element wt:picForeachList) {
+      // 获取foreach标签内容
+      String foreachContent = wt.getTextTrim();
+      boolean inline = false;
+      if(foreachContent.contains("inline")) {
+        inline = true;
+      }
+      foreachContent = foreachContent.replaceAll("^#pic_inline_multi_|^#pic_multi_", "#");
+      // 找到w:p祖先元素
+      Element wp = (Element) wt.selectSingleNode("ancestor::w:p");
+      Element wpPic = null;
+      if(foreachContent.contains("foreach")) {
+        // 如果是foreach，那么接下来找到w:p的下一个包含w:drawing元素的兄弟元素，就是放占位图片的
+        Element wDrawing = (Element) wp.selectSingleNode("following-sibling::w:p//w:drawing");
+        wpPic = (Element) wDrawing.selectSingleNode("ancestor::w:p");
+        // 放占位图片的w:p中可能不止一个占位图片，需要使用他们的“替代文字”来标识不同的图片
+        List<Element> wDrawingList = wpPic.selectNodes("descendant::w:drawing");
+        for(Element drawingElement:wDrawingList) {
+          Element docPr = (Element) drawingElement.selectSingleNode("descendant::wp:docPr");
+          String domainName = docPr.attributeValue("descr");
+          // 将 wp:docPr 的 descr 属性删除
+          Attribute docPrDescr = docPr.attribute("descr");
+          if(docPrDescr!=null) docPrDescr.detach();
+          // 将 pic:cNvPr 的 descr 属性删除
+          Element piccNvPr = (Element)drawingElement.selectSingleNode("descendant::*[namespace-uri()='http://schemas.openxmlformats.org/drawingml/2006/picture' and local-name()='cNvPr']");
+          Attribute piccNvPrDescr = piccNvPr.attribute("descr");
+          if(piccNvPrDescr!=null) piccNvPrDescr.detach();
+          // 获取foreach中item的内容
+          String foreachItemContent = domainName;
+          addPictureElement(document,drawingElement, foreachContent, foreachItemContent);
+        }
+      }
+      if(inline) {
+        // 如果是行内循环，就将临时标签放到pic所在的w:p元素中，foreach放在w:pPr后面，end放在最后
+        Element tmp = DocumentHelper.createElement(TEMP_TAG);
+        String text = wt.getText().replaceAll("^#pic_inline_multi_", "#");
+        tmp.setText(text);
+        if(text.contains("foreach")) {
+          // 如果是pic_inline_multi_foreach，则将foreach语句放到图片所在w:p的w:pPr后面
+          int index = wpPic.indexOf(wpPic.element("pPr"));
+          if(indexFitFlag) index = (index - 1) / 2;
+          wpPic = (Element) wp.selectSingleNode("following-sibling::w:p");
+          wpPic.elements().add(index + 1, tmp);
+        } else {
+          // 如果是pic_inline_end，则将end语句放到图片所在w:p的最后即可
+          wpPic = (Element) wp.selectSingleNode("preceding-sibling::w:p[1]");
+          wpPic.elements().add(tmp);
+        }
+      } else {
+        // 将w:p祖先元素替换成临时标签元素
+        int index = wp.getParent().indexOf(wp);
+        if(indexFitFlag) index = (index - 1) / 2;
+        Element tmp = DocumentHelper.createElement(TEMP_TAG);
+        String text = wt.getText().replaceAll("^#pic_multi_", "#");
+        tmp.setText(text);
+        wp.getParent().elements().add(index, tmp);
+      }
+      wp.detach();
+    }
+  }
+  private static void addPictureElement(Document document, Element drawingElement, String foreachContent, String foreachItemContent) {
+    // 生成唯一id，用于关联w:drawing中rId---Relationship中Target---pkg:part中的binaryData
+    String uuid = UUID.randomUUID().toString().replace("-", "");
+    Element blip = (Element) drawingElement.selectSingleNode("descendant::*[namespace-uri()='http://schemas.openxmlformats.org/drawingml/2006/main' and local-name()='blip']");
+    blip.addAttribute("embed", "rId_" + uuid + "_$!{foreach.index}");
+    // 新增Relationship循环开始标签
+    Element relationshipForeachBegin = DocumentHelper.createElement(TEMP_TAG);
+    relationshipForeachBegin.setText(foreachContent);
+    // 新增Relationship循环内容标签
+    Element relationshipForeachContent = DocumentHelper.createElement(QName.get("Relationship", "http://schemas.openxmlformats.org/package/2006/relationships"));
+    relationshipForeachContent.addAttribute("Id", "rId_" + uuid + "_$!{foreach.index}");
+    relationshipForeachContent.addAttribute("Type", "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image");
+    relationshipForeachContent.addAttribute("Target", "media/image_" + uuid + "_$!{foreach.index}.png");
+    // 新增Relationship循环结束标签
+    Element relationshipForeachEnd = DocumentHelper.createElement(TEMP_TAG);
+    relationshipForeachEnd.setText("#end");
+    // 将Relationship循环标签添加到Relationships中
+    Element pkgPart = (Element) document.selectSingleNode("//*[namespace-uri()='http://schemas.microsoft.com/office/2006/xmlPackage' and local-name()='part' and @pkg:name='/word/_rels/document.xml.rels']");
+    Element relationships = (Element) pkgPart.selectSingleNode("descendant::*[namespace-uri()='http://schemas.openxmlformats.org/package/2006/relationships' and local-name()='Relationships']");
+    relationships.elements().add(relationshipForeachBegin);
+    relationships.elements().add(relationshipForeachContent);
+    relationships.elements().add(relationshipForeachEnd);
+    // 新增pkg:part标签开始标签
+    Element pkgPartForeachBegin = DocumentHelper.createElement(TEMP_TAG);
+    pkgPartForeachBegin.setText(foreachContent);
+    // 新增pkg:part循环内容标签
+    Element pkgPartForeachContent = DocumentHelper.createElement("pkg:part");
+    pkgPartForeachContent.addAttribute("pkg:name", "/word/media/image_" + uuid + "_$!{foreach.index}.png");
+    pkgPartForeachContent.addAttribute("pkg:contentType", "image/png");
+    pkgPartForeachContent.addAttribute("pkg:compression", "store");
+    Element binaryData = DocumentHelper.createElement("pkg:binaryData");
+    binaryData.setText(foreachItemContent);
+    pkgPartForeachContent.add(binaryData);
+    // 新增pkg:part循环结束标签
+    Element pkgPartForeachEnd = DocumentHelper.createElement(TEMP_TAG);
+    pkgPartForeachEnd.setText("#end");
+    // 将pkg:part循环标签添加到pkg:package中
+    Element pkgPackage = (Element) document.selectSingleNode("//*[namespace-uri()='http://schemas.microsoft.com/office/2006/xmlPackage' and local-name()='package']");
+    pkgPackage.elements().add(pkgPartForeachBegin);
+    pkgPackage.elements().add(pkgPartForeachContent);
+    pkgPackage.elements().add(pkgPartForeachEnd);
   }
 }

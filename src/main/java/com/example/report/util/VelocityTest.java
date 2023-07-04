@@ -1,5 +1,7 @@
 package com.example.report.util;
 
+import com.github.cliftonlabs.json_simple.JsonArray;
+import com.github.cliftonlabs.json_simple.JsonObject;
 import com.spire.doc.FileFormat;
 import org.apache.velocity.Template;
 import org.apache.velocity.VelocityContext;
@@ -83,6 +85,18 @@ public class VelocityTest {
     // 表格合并数据
     CancerInfo ci = new CancerInfo("brain", false, "mb", "", "a");
     context.put("ci", ci);
+
+    // 单行多图片foreach
+    JsonArray picMultiList = new JsonArray();
+    JsonObject obj1 = new JsonObject();
+    obj1.put("one", PictureData.getPicString1());
+//    obj1.put("two", PictureData.getPicString2());
+    JsonObject obj2 = new JsonObject();
+    obj2.put("one", PictureData.getPicString1());
+    obj2.put("two", PictureData.getPicString2());
+    picMultiList.add(obj1);
+    picMultiList.add(obj2);
+    context.put("picMultiList", picMultiList);
 
     // 输出
 //    StringWriter sw = new StringWriter();
