@@ -90,9 +90,9 @@ public class VelocityTest {
     JsonArray picMultiList = new JsonArray();
     JsonObject obj1 = new JsonObject();
     obj1.put("one", PictureData.getPicString1());
-//    obj1.put("two", PictureData.getPicString2());
+    obj1.put("two", PictureData.getPicString2());
     JsonObject obj2 = new JsonObject();
-    obj2.put("one", PictureData.getPicString1());
+//    obj2.put("one", PictureData.getPicString1());
     obj2.put("two", PictureData.getPicString2());
     picMultiList.add(obj1);
     picMultiList.add(obj2);

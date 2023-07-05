@@ -68,6 +68,7 @@ public class XMLConverter {
     // 处理图片循环
     handlePictureForeach(document);
     handleMultiPictureForeach(document);
+    removeRedundantPictureAttribute(document);
     System.out.println("图片处理完成");
     // 移除临时标签，保留标签的text
     document = removeTempTag(document);
@@ -437,20 +438,13 @@ public class XMLConverter {
     List<Element> docPrList = document.selectNodes("//*[local-name()='docPr' and contains(@descr, '$!{')  and contains(@descr, '}')]");
     for(Element element:docPrList) {
       String domainName = element.attributeValue("descr");
+      System.out.println("domainName: " + domainName);
       Element inline = element.getParent();
       String rId = ((Element) inline.selectSingleNode("descendant::*[namespace-uri()='http://schemas.openxmlformats.org/drawingml/2006/main' and local-name()='blip']")).attributeValue("embed");
       Element targetElement = (Element) document.selectSingleNode("//*[namespace-uri()='http://schemas.openxmlformats.org/package/2006/relationships' and local-name()='Relationship' and @Id='"+rId+"']");
       String target = targetElement.attributeValue("Target");
       Element partElement = (Element) document.selectSingleNode("//*[namespace-uri()='http://schemas.microsoft.com/office/2006/xmlPackage' and local-name()='part' and @pkg:name='/word/"+target+"']");
       partElement.element("binaryData").setText(domainName);
-
-      // 将 wp:docPr 的 descr 属性删除
-      Attribute docPrDescr = element.attribute("descr");
-      docPrDescr.detach();
-      // 将 pic:cNvPr 的 descr 属性删除
-      Element piccNvPr = (Element)inline.selectSingleNode("descendant::*[namespace-uri()='http://schemas.openxmlformats.org/drawingml/2006/picture' and local-name()='cNvPr']");
-      Attribute piccNvPrDescr = piccNvPr.attribute("descr");
-      if(piccNvPrDescr!=null) piccNvPrDescr.detach();
     }
   }
 
@@ -554,13 +548,6 @@ public class XMLConverter {
         for(Element drawingElement:wDrawingList) {
           Element docPr = (Element) drawingElement.selectSingleNode("descendant::wp:docPr");
           String domainName = docPr.attributeValue("descr");
-          // 将 wp:docPr 的 descr 属性删除
-          Attribute docPrDescr = docPr.attribute("descr");
-          if(docPrDescr!=null) docPrDescr.detach();
-          // 将 pic:cNvPr 的 descr 属性删除
-          Element piccNvPr = (Element)drawingElement.selectSingleNode("descendant::*[namespace-uri()='http://schemas.openxmlformats.org/drawingml/2006/picture' and local-name()='cNvPr']");
-          Attribute piccNvPrDescr = piccNvPr.attribute("descr");
-          if(piccNvPrDescr!=null) piccNvPrDescr.detach();
           // 获取foreach中item的内容
           String foreachItemContent = domainName;
           addPictureElement(document,drawingElement, foreachContent, foreachItemContent);
@@ -635,5 +622,25 @@ public class XMLConverter {
     pkgPackage.elements().add(pkgPartForeachBegin);
     pkgPackage.elements().add(pkgPartForeachContent);
     pkgPackage.elements().add(pkgPartForeachEnd);
+  }
+
+  /**
+   * picture元素都处理好了，之后调用这个方法，将多余的属性去掉
+   * 不能提前调用，可能把需要的属性干掉，其他处理图片的方法无法使用
+   * 将前面 wp:docPr 的descr属性删除，将pic:cNvPr 的descr属性删除
+   * @param document 文档元素
+   */
+  public static void removeRedundantPictureAttribute(Document document) {
+    List<Element> docPrList = document.selectNodes("//*[local-name()='docPr' and contains(@descr, '$!{')  and contains(@descr, '}')]");
+    for(Element element:docPrList) {
+      Element inline = element.getParent();
+      // 将 wp:docPr 的 descr 属性删除
+      Attribute docPrDescr = element.attribute("descr");
+      docPrDescr.detach();
+      // 将 pic:cNvPr 的 descr 属性删除
+      Element piccNvPr = (Element)inline.selectSingleNode("descendant::*[namespace-uri()='http://schemas.openxmlformats.org/drawingml/2006/picture' and local-name()='cNvPr']");
+      Attribute piccNvPrDescr = piccNvPr.attribute("descr");
+      if(piccNvPrDescr!=null) piccNvPrDescr.detach();
+    }
   }
 }
