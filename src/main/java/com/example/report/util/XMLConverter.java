@@ -13,6 +13,7 @@ import java.io.OutputStreamWriter;
 import java.nio.charset.StandardCharsets;
 import java.text.SimpleDateFormat;
 import java.util.*;
+import java.util.function.ToDoubleBiFunction;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -314,19 +315,34 @@ public class XMLConverter {
     // tbl_tr_if, tbl_tr_else, tbl_tr_elseif, tbl_tr_end
     StringBuffer sb = new StringBuffer();
     sb.append("contains(text(),'#tbl_tr_foreach')");
-    sb.append(" or contains(text(), '#tbl_tr_end')");
+    sb.append(" or contains(text(), '#tbl_tr_end_foreach')");
     sb.append(" or contains(text(), '#tbl_tr_if')");
     sb.append(" or contains(text(), '#tbl_tr_else')");
     sb.append(" or contains(text(), '#tbl_tr_elseif')");
+    sb.append(" or contains(text(), '#tbl_tr_end')");
     sb.append(" or contains(text(), '#tbl_tr_set')");
-    List<Element> trForeachList = document.selectNodes("//*[local-name()='t' and ("+sb.toString()+")]");
+    // 处理循环中有图片的内容
+    List<Element> trForeachList = document.selectNodes("//*[local-name()='t' and (contains(text(), '#tbl_tr_foreach'))]");
     for(Element wt:trForeachList) {
+      String foreachContent = wt.getText().replaceAll("^#tbl_tr_", "#").replaceAll("_foreach$", "");
+      Element tr = (Element) wt.selectSingleNode("ancestor::w:tr");
+      List<Element> drawingList = tr.selectNodes("following-sibling::*//w:drawing");
+      for(Element drawing:drawingList) {
+        Element docPr = (Element) drawing.selectSingleNode("descendant::wp:docPr");
+        String domainName = docPr.attributeValue("descr");
+        // 如果时占位图片或者固定图片，不在这里处理
+        if(domainName.matches("^placeholder|^static")) continue;
+        addPictureElement(document, drawing, foreachContent, domainName);
+      }
+    }
+    List<Element> trList = document.selectNodes("//*[local-name()='t' and ("+sb.toString()+")]");
+    for(Element wt:trList) {
       Element tr = (Element) wt.selectSingleNode("ancestor::w:tr");
       Element tbl = (Element) wt.selectSingleNode("ancestor::w:tbl");
       int index = tbl.indexOf(tr);
       if(indexFitFlag) index = (index - 1) / 2;
       Element foreach = DocumentHelper.createElement(TEMP_TAG);
-      String text = wt.getText().replaceAll("^#tbl_tr_", "#");
+      String text = wt.getText().replaceAll("^#tbl_tr_", "#").replaceAll("_foreach$", "");
       foreach.setText(text);
       tbl.elements().add(index, foreach);
       tbl.remove(tr);
@@ -476,6 +492,8 @@ public class XMLConverter {
       if(foreachContent.contains("foreach")) {
         // 如果是foreach，那么接下来找到w:p的下一个包含w:drawing元素的兄弟元素，就是放占位图片的
         Element wDrawing = (Element) wp.selectSingleNode("following-sibling::w:p//w:drawing");
+        // 循环中可能有占位图片，这里不处理
+        // todo
         wpPic = (Element) wDrawing.selectSingleNode("ancestor::w:p");
         // 放占位图片的w:p中可能不止一个占位图片，需要使用他们的“替代文字”来标识不同的图片
         List<Element> wDrawingList = wpPic.selectNodes("descendant::w:drawing");

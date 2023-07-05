@@ -45,6 +45,9 @@ false: 在w:tc的w:tcPr中加入<w:vMerge/>
 4，通过名称（前面要拼上/word/）找到对应图片的base64编码，将编码内容替换为域名
 5，将前面 wp:docPr 的descr属性删除，将pic:cNvPr 的descr属性删除
 
+## 固定图片
+固定图片在“替换文字”中，以"static"开头标记，代码将不做处理
+
 ## foreach图片
 #pic_foreach, #pic_end 处理换行图片foreach循环
 #pic_inline_foreach, #pic_inline_end 处理行内图片foreach循环
