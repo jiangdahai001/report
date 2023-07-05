@@ -434,9 +434,9 @@ public class XMLConverter {
    * @param document 文档对象
    */
   public static void handlePictureElement(Document document) {
-    List<Element> docPrList = document.selectNodes("//*[local-name()='docPr' and contains(@descr, '$!{')  and contains(@descr, '}')]");
+    List<Element> docPrList = document.selectNodes("//*[local-name()='docPr' and contains(@descr, 'placeholder$!{')  and contains(@descr, '}')]");
     for(Element element:docPrList) {
-      String domainName = element.attributeValue("descr");
+      String domainName = element.attributeValue("descr").replaceAll("^placeholder", "");
       Element inline = element.getParent();
       String rId = ((Element) inline.selectSingleNode("descendant::*[namespace-uri()='http://schemas.openxmlformats.org/drawingml/2006/main' and local-name()='blip']")).attributeValue("embed");
       Element targetElement = (Element) document.selectSingleNode("//*[namespace-uri()='http://schemas.openxmlformats.org/package/2006/relationships' and local-name()='Relationship' and @Id='"+rId+"']");

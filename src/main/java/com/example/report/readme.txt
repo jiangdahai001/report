@@ -38,7 +38,7 @@ false: 在w:tc的w:tcPr中加入<w:vMerge/>
 
 ## 占位图片
 处理占位图片元素，
-0，在word中用”替换文字“用域来标记图片，域必须以"$!{"开始，必须以"}"结束，否则如果值为空时binaryData会有问题
+0，在word中用”替换文字“用域来标记图片，域必须以"placeholder$!{"开始，必须以"}"结束，否则如果值为空时binaryData会有问题
 1，在xml中通过 w:drawing 标签下 wp:docPr 的 descr 属性的值来找到对应的域
 2，找到对应的a:blip 标签的 r:embed 属性值，就是word给图片分配的id
 3，通过id属性找到对应的Relationship，获取Target属性的值，就是对应图片在word中的实际名称
