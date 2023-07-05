@@ -14,7 +14,9 @@ import org.apache.velocity.tools.ToolManager;
 
 import java.io.*;
 import java.nio.charset.StandardCharsets;
+import java.text.SimpleDateFormat;
 import java.util.*;
+import java.util.stream.Collectors;
 
 /**
  * 从xml生成doc，测试java将数据填到具体的对象中，使用velocity模板进行填充
@@ -26,9 +28,15 @@ public class VelocityTest {
   public static String TARGET_FILE = "ahello.doc";
   public static void main(String[] args) {
     System.out.println("hello, world, 你好！");
-//    String a = "C9C9C9";
-//    String b = a.replaceAll("\"", "");
-//    System.out.println(b);
+    SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd");
+    String today = dateFormat.format(new Date());
+    File folder = new File(TEST_PATH);
+    String[] names = folder.list((dir, name) -> {
+      return name.startsWith(today);
+    });
+    List<String> nameList = List.of(names).stream().sorted(Comparator.reverseOrder()).collect(Collectors.toList());
+    XML_FILE = nameList.get(0);
+    System.out.println("template file: " + XML_FILE);
     test();
   }
 
@@ -59,6 +67,7 @@ public class VelocityTest {
     // 设置变量
     ToolContext context = toolManager.createContext();
 
+    // 文本数据
     context.put("greet", "Velocity");
     context.put("greeting", "Velocity");
     List<String> geneList = new ArrayList<>();
@@ -94,7 +103,7 @@ public class VelocityTest {
     obj1.put("two", PictureData.getPicString2());
     JsonObject obj2 = new JsonObject();
     obj2.put("name", "lisi");
-//    obj2.put("one", PictureData.getPicString1());
+    obj2.put("one", PictureData.getPicString1());
     obj2.put("two", PictureData.getPicString2());
     picMultiList.add(obj1);
     picMultiList.add(obj2);
