@@ -321,20 +321,26 @@ public class XMLConverter {
     sb.append(" or contains(text(), '#tbl_tr_elseif')");
     sb.append(" or contains(text(), '#tbl_tr_end')");
     sb.append(" or contains(text(), '#tbl_tr_set')");
-    // 处理循环中有图片的内容
+    // 处理循环图片相关的内容，这里只处理图片，标签相关内容在下面处理
     List<Element> trForeachList = document.selectNodes("//*[local-name()='t' and (contains(text(), '#tbl_tr_foreach'))]");
     for(Element wt:trForeachList) {
       String foreachContent = wt.getText().replaceAll("^#tbl_tr_", "#").replaceAll("_foreach$", "");
       Element tr = (Element) wt.selectSingleNode("ancestor::w:tr");
-      List<Element> drawingList = tr.selectNodes("following-sibling::*//w:drawing");
-      for(Element drawing:drawingList) {
-        Element docPr = (Element) drawing.selectSingleNode("descendant::wp:docPr");
-        String domainName = docPr.attributeValue("descr");
-        // 如果时占位图片或者固定图片，不在这里处理
-        if(domainName.matches("^placeholder|^static")) continue;
-        addPictureElement(document, drawing, foreachContent, domainName);
+      List<Element> siblingList = tr.selectNodes("following-sibling::*");
+      for(Element sibling:siblingList) {
+        if(sibling.getStringValue().contains("#tbl_tr_end_foreach")) break;
+        List<Element> drawingList = sibling.selectNodes("descendant::*//w:drawing");
+        for (Element drawing : drawingList) {
+          Element docPr = (Element) drawing.selectSingleNode("descendant::wp:docPr");
+          String domainName = docPr.attributeValue("descr");
+          if(domainName == null) throw new RuntimeException("图片没有填写”替换文字“，请检查");
+          // 如果时占位图片或者固定图片，不在这里处理
+          if (domainName.matches("^placeholder.*?|^static.*?")) continue;
+          addPictureElement(document, drawing, foreachContent, domainName);
+        }
       }
     }
+    // 处理标签相关内容
     List<Element> trList = document.selectNodes("//*[local-name()='t' and ("+sb.toString()+")]");
     for(Element wt:trList) {
       Element tr = (Element) wt.selectSingleNode("ancestor::w:tr");
@@ -450,11 +456,14 @@ public class XMLConverter {
    * @param document 文档对象
    */
   public static void handlePictureElement(Document document) {
-    List<Element> docPrList = document.selectNodes("//*[local-name()='docPr' and contains(@descr, 'placeholder$!{')  and contains(@descr, '}')]");
-    for(Element element:docPrList) {
-      String domainName = element.attributeValue("descr").replaceAll("^placeholder", "");
-      Element inline = element.getParent();
-      String rId = ((Element) inline.selectSingleNode("descendant::*[namespace-uri()='http://schemas.openxmlformats.org/drawingml/2006/main' and local-name()='blip']")).attributeValue("embed");
+    List<Element> drawingList = document.selectNodes("//*[local-name()='drawing']");
+    for(Element drawing:drawingList) {
+      Element docPr = (Element) drawing.selectSingleNode("descendant::wp:docPr");
+      String domainName = docPr.attributeValue("descr");
+      // 这里只处理占位图片，其他的图片不处理
+      if(!domainName.matches("^placeholder.*?")) continue;
+      domainName = docPr.attributeValue("descr").replaceAll("^placeholder", "");
+      String rId = ((Element) drawing.selectSingleNode("descendant::*[namespace-uri()='http://schemas.openxmlformats.org/drawingml/2006/main' and local-name()='blip']")).attributeValue("embed");
       Element targetElement = (Element) document.selectSingleNode("//*[namespace-uri()='http://schemas.openxmlformats.org/package/2006/relationships' and local-name()='Relationship' and @Id='"+rId+"']");
       String target = targetElement.attributeValue("Target");
       Element partElement = (Element) document.selectSingleNode("//*[namespace-uri()='http://schemas.microsoft.com/office/2006/xmlPackage' and local-name()='part' and @pkg:name='/word/"+target+"']");
