@@ -20,6 +20,10 @@
 前提是都是段落行内中，即语法所在的父元素wr是后面要被移除的
 注意：#p开头的标签是要单独写一行的，#inline开头的标签是同其他内容写在同一行内的
 
+## 字体颜色
+处理行内字体颜色，包括字体的颜色，高亮，底纹（color，highlight，shading）
+#inline_color_begin(color="FF0000",highlight="yellow",shading="0000FF")实际内容#inline_color_end
+
 ## 表格行合并
 #tbl_vmerge(val), 参数为是否开始行合并
 true: 则在w:tc的w:tcPr中加入<w:vMerge w:val="restart"/>

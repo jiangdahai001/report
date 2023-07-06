@@ -78,7 +78,7 @@ public class VelocityTest {
     context.put("pi", pi);
     context.put("geneList", geneList);
     List<PatientInfo> list = new ArrayList<>();
-    list.add(new PatientInfo("lisi1", "13512345678", "male", 18, geneList));
+    list.add(new PatientInfo("lisi1", "13512345678", "male", 17, geneList));
     list.add(new PatientInfo("lisi2", "13512345678", "male", 18, geneList));
     list.add(new PatientInfo("lisi2", "13512345678", "male", 18, geneList));
     context.put("list", list);

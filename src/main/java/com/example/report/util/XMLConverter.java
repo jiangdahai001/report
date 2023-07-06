@@ -16,6 +16,7 @@ import java.util.*;
 import java.util.function.ToDoubleBiFunction;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 import static java.util.regex.Pattern.compile;
 
@@ -53,6 +54,8 @@ public class XMLConverter {
     handleVelocityParagraphTag(document);
     // 处理段落中行内velocity标签语法
     handleVelocityInlineTag(document);
+    // 处理行内颜色参数
+    handleInlineColor(document);
     // 处理段落的行内循环
     handleInlineForeach(document);
     // 处理table中行合并
@@ -234,6 +237,85 @@ public class XMLConverter {
       wrParent.elements().add(index, tmp);
       wrParent.remove(wr);
     }
+  }
+
+  /**
+   * 处理行内字体颜色，包括字体的颜色，高亮，底纹（color，highlight，shading）
+   * #inline_color_begin(color="FF0000",highlight="yellow",shading="0000FF")实际内容#inline_color_end
+   * @param document 文档元素
+   */
+  public static void handleInlineColor(Document document) {
+    StringBuffer sb = new StringBuffer();
+    sb.append("contains(text(),'#inline_color_begin')");
+    List<Element> elementList = document.selectNodes("//*[local-name()='t' and ("+sb.toString()+")]");
+    for(Element wt:elementList) {
+      Element wr = (Element) wt.selectSingleNode("ancestor::w:r");
+      String content = wt.getText().replaceAll("^#inline_color_begin\\(|\\)$", "");
+      Map<String, String> paramsMap = getParamsMap(content);
+      List<Element> siblingList = wr.selectNodes("following-sibling::*");
+      for(Element sibling:siblingList) {
+        if(sibling.getStringValue().contains("#inline_color_end")) {
+          sibling.detach();
+          break;
+        }
+        // 设置字体颜色
+        if(paramsMap.containsKey("color")) {
+          Element wcolor = (Element) sibling.selectSingleNode("descendant::*/w:rPr/w:color");
+          if (wcolor == null) {
+            Element color = DocumentHelper.createElement("w:color");
+            color.addAttribute("w:val", paramsMap.get("color"));
+            sibling.element("rPr").add(color);
+          } else {
+            wcolor.addAttribute("w:val", paramsMap.get("color"));
+          }
+        }
+        // 设置字体高亮色
+        if(paramsMap.containsKey("highlight")) {
+          Element whighlight = (Element) sibling.selectSingleNode("descendant::*/w:rPr/w:highlight");
+          if (whighlight == null) {
+            Element highlight = DocumentHelper.createElement("w:highlight");
+            highlight.addAttribute("w:val", paramsMap.get("highlight"));
+            sibling.element("rPr").add(highlight);
+          } else {
+            whighlight.addAttribute("w:val", paramsMap.get("highlight"));
+          }
+        }
+        // 设置字体底纹
+        if(paramsMap.containsKey("shading")) {
+          Element wshd = (Element) sibling.selectSingleNode("descendant::*/w:rPr/w:shd");
+          if (wshd == null) {
+            Element shd = DocumentHelper.createElement("w:shd");
+            shd.addAttribute("w:fill", paramsMap.get("shading"));
+            shd.addAttribute("w:val", "clear");
+            shd.addAttribute("w:color", "auto");
+            sibling.element("rPr").add(shd);
+          } else {
+            wshd.addAttribute("w:fill", paramsMap.get("shading"));
+            wshd.addAttribute("w:val", "clear");
+            wshd.addAttribute("w:color", "auto");
+          }
+        }
+      }
+      wr.detach();
+    }
+  }
+
+  /**
+   * 将参数内容转换为参数map，方便参数使用
+   * content: param1="asdf",param2="dsdfds"
+   * @param content 参数文本
+   * @return 参数map
+   */
+  private static Map<String, String> getParamsMap(String content) {
+    String[] paramsArray = content.split(",");
+    Map<String, String> paramsMap = new HashMap<>();
+    Arrays.stream(paramsArray).forEach(param -> {
+      String[] tmp = param.split("=");
+      String key = tmp[0];
+      String value = tmp[1].replaceAll("\"", "");
+      paramsMap.put(key, value);
+    });
+    return paramsMap;
   }
 
   /**
