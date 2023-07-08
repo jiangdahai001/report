@@ -13,12 +13,24 @@
 <w:fldChar w:fldCharType="end" />
 
 ## velocity一般语法
+注意：#p开头的标签是要单独写一行的，#inline开头的标签是同其他内容写在同一行内的
+
 处理在模板中，使用velocity的set、if、foreach、macro等语法
 #p_if, #p_elseif, #p_else, #p_end, #p_set, #p_macro, #p_foreach
 前提是都是独立的段落中，即语法所在的父元素wp是后面要被移除的
+关于带有换行图片的foreach循环，需要配合#p_end_foreach，用于标识循环结束
+处理换行图片foreach循环，单行多个或者多个都可以，需要在图片的“替换文字”处提供对应的域明，用于标识不同图片
+找到#p_foreach, #p_end_foreach标签，在#foreach和#end中间，所有w:drawing元素就是图片元素
+替换图片元素中的rId内容，引入$!{foreach.index}实现图片数量的动态变化
+新增Relationship及pkg:part，同样引入$!{foreach.index}实现图片数量的动态变化
+
 #inline_if, #inline_elseif, #inline_else, #inline_end, #inline_set, #inline_macro, #inline_foreach
 前提是都是段落行内中，即语法所在的父元素wr是后面要被移除的
-注意：#p开头的标签是要单独写一行的，#inline开头的标签是同其他内容写在同一行内的
+关于带有行内图片的foreach循环，单行多个或者多个都可以，需要在图片的“替换文字”处提供对应的域明，用于标识不同图片
+找到#inline_foreach标签，标签所在的w:p下所有w:drawing元素就是图片元素
+替换图片元素中的rId内容，引入$!{foreach.index}实现图片数量的动态变化
+新增Relationship及pkg:part，同样引入$!{foreach.index}实现图片数量的动态变化
+
 
 ## 字体颜色
 处理行内字体颜色，包括字体的颜色，高亮，底纹（color，highlight，shading）
@@ -51,14 +63,3 @@ false: 在w:tc的w:tcPr中加入<w:vMerge/>
 
 ## 固定图片
 固定图片在“替换文字”中，以"static"开头标记，代码将不做处理
-
-## foreach图片
-#pic_foreach, #pic_end 处理换行图片foreach循环
-#pic_inline_foreach, #pic_inline_end 处理行内图片foreach循环
-在word中用”替换文字“用域来标记图片，域必须以"$!{"开始，必须以"}"结束，否则如果值为空时binaryData会有问题
-思路：找到#pic_foreach, #pic_end, #pic_inline_foreach, #pic_inline_end标签，在#foreach和#end中间，所有w:drawing元素就是图片元素
-找到图片元素列表，循环列表
-替换图片元素中的rId内容，引入$!{foreach.index}实现图片数量的动态变化
-新增Relationship及pkg:part，同样引入$!{foreach.index}实现图片数量的动态变化
-换行循环在图片的wp元素前后加foreach, end语法
-行内循环在图片的wp元素内部加foreach, end语法

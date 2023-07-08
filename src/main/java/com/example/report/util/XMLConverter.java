@@ -26,6 +26,7 @@ import static java.util.regex.Pattern.compile;
 public class XMLConverter {
   public static final String TEMP_TAG = "geneplus_placeholder";
   // 注意：这里的Element.indexOf获取的索引和Element.elements()获取的list的索引不能一一对应，目前看是x=(n-1)/2
+  // 使用spiredoc，目前一直是正常的，下面这个开关备用
   public static final boolean indexFitFlag = false;
   public static void main(String[] args) throws Exception{
     System.out.println("XMLConverter");
@@ -69,9 +70,8 @@ public class XMLConverter {
     handleTableTcShading(document);
     // 处理占位图片
     handlePictureElement(document);
-    // 处理图片循环
-    handlePictureForeach(document);
-    handlePictureInlineForeach(document);
+    // 处理完图片之后，将多余的属性删除
+    // 注意，这个步骤一定要在所有的图片都处理完成之后再做
     removeRedundantPictureAttribute(document);
     System.out.println("图片处理完成");
     // 移除临时标签，保留标签的text
@@ -179,6 +179,12 @@ public class XMLConverter {
   /**
    * 处理在独立段落中，使用velocity的set、if、foreach、macro等语法
    * 前提是都是独立的段落中，即语法所在的父元素wp是后面要被移除的
+   *
+   * 关于带有图片的foreach，需要配合#p_end_foreach，用于标识循环结束
+   * 处理换行图片foreach循环，单行多个或者多个都可以，需要在图片的“替换文字”处提供对应的域明，用于标识不同图片
+   * 找到#p_foreach, #p_end_foreach标签，在#foreach和#end中间，所有w:drawing元素就是图片元素
+   * 替换图片元素中的rId内容，引入$!{foreach.index}实现图片数量的动态变化
+   * 新增Relationship及pkg:part，同样引入$!{foreach.index}实现图片数量的动态变化
    * @param document 文档对象
    */
   public static void handleVelocityParagraphTag(Document document) {
@@ -192,25 +198,44 @@ public class XMLConverter {
     sb.append(" or contains(text(), '#p_set')");
     // macro 标签相关
     sb.append(" or contains(text(), '#p_macro')");
-    // foreach 标签相关，p_end在上面if标签有了
+    // foreach 标签相关
     sb.append(" or contains(text(), '#p_foreach')");
+    sb.append(" or contains(text(), '#p_end_foreach')");
     List<Element> pifList = document.selectNodes("//*[local-name()='t' and ("+sb.toString()+")]");
     for(Element wt:pifList) {
       Element wp = (Element) wt.selectSingleNode("ancestor::w:p");
-      Element wpParent = wp.getParent();
-      int index = wpParent.indexOf(wp);
+      // 处理包括图片的循环内容
+      if(wt.getTextTrim().contains("#p_foreach")) {
+        String foreachContent = wt.getTextTrim().replaceAll("^#p_", "#");
+        List<Element> wDrawingList = new ArrayList<>();
+        List<Element> wpSiblingList = wp.selectNodes("following-sibling::*");
+        // p_foreach到p_end_foreach之间的w:drawing都是参与循环的图片对象
+        for(Element sibling:wpSiblingList) {
+          String content = sibling.getStringValue();
+          if(content.contains("#p_end_foreach")) break;
+          wDrawingList.addAll(sibling.selectNodes("descendant::w:drawing"));
+        }
+        // 放占位图片的w:p中可能不止一个占位图片，需要使用他们的“替代文字”来标识不同的图片
+        handleDrawingList(wDrawingList, document, foreachContent);
+      }
+      int index = wp.getParent().indexOf(wp);
       if(indexFitFlag) index = (index - 1) / 2;
       Element tmp = DocumentHelper.createElement(TEMP_TAG);
-      String text = wt.getText().replaceAll("^#p_", "#");
+      String text = wt.getText().replaceAll("^#p_", "#").replaceAll("_foreach$", "");
       tmp.setText(text);
-      wpParent.elements().add(index, tmp);
-      wpParent.remove(wp);
+      wp.getParent().elements().add(index, tmp);
+      wp.detach();
     }
   }
 
   /**
    * 处理在段落行内中，使用velocity的set、if、foreach、macro等语法
    * 前提是都是段落行内中，即语法所在的父元素wr是后面要被移除的
+   *
+   * 处理行内图片foreach循环，单行多个或者多个都可以，需要在图片的“替换文字”处提供对应的域明，用于标识不同图片
+   * 找到#inline_foreach标签，标签所在的w:p下所有w:drawing元素就是图片元素
+   * 替换图片元素中的rId内容，引入$!{foreach.index}实现图片数量的动态变化
+   * 新增Relationship及pkg:part，同样引入$!{foreach.index}实现图片数量的动态变化
    * @param document 文档对象
    */
   public static void handleVelocityInlineTag(Document document) {
@@ -229,14 +254,22 @@ public class XMLConverter {
     List<Element> elementList = document.selectNodes("//*[local-name()='t' and ("+sb.toString()+")]");
     for(Element wt:elementList) {
       Element wr = (Element) wt.selectSingleNode("ancestor::w:r");
-      Element wrParent = wr.getParent();
-      int index = wrParent.indexOf(wr);
+      // 处理图片元素
+      // 找到w:p祖先元素，需要把foreach放到接下来目标w:p第一个wt位置中，把end放到目标w:p最后一个wt位置
+      Element wp = (Element) wt.selectSingleNode("ancestor::w:p");
+      if(wt.getText().contains("#inline_foreach")) {
+        String foreachContent = wt.getTextTrim().replaceAll("^#inline_", "#");
+        // 放占位图片的w:p中可能不止一个占位图片，需要使用他们的“替代文字”来标识不同的图片
+        List<Element> wDrawingList = wp.selectNodes("descendant::w:drawing");
+        handleDrawingList(wDrawingList, document, foreachContent);
+      }
+      int index = wr.getParent().indexOf(wr);
       if(indexFitFlag) index = (index - 1) / 2;
       Element tmp = DocumentHelper.createElement(TEMP_TAG);
       String text = wt.getText().replaceAll("^#inline_", "#");
       tmp.setText(text);
-      wrParent.elements().add(index, tmp);
-      wrParent.remove(wr);
+      wr.getParent().elements().add(index, tmp);
+      wr.detach();
     }
   }
 
@@ -554,83 +587,6 @@ public class XMLConverter {
     }
   }
 
-  /**
-   * 处理换行图片foreach循环，单行多个或者多个都可以，需要在图片的“替换文字”处提供对应的域明，用于标识不同图片
-   * 找到#pic_foreach, #pic_end标签，在#foreach和#end中间，所有w:drawing元素就是图片元素
-   * 替换图片元素中的rId内容，引入$!{foreach.index}实现图片数量的动态变化
-   * 新增Relationship及pkg:part，同样引入$!{foreach.index}实现图片数量的动态变化
-   * 换行循环在图片的wp元素前后加foreach, end语法
-   * @param document 目标文档
-   */
-  public static void handlePictureForeach(Document document) {
-    StringBuffer sb = new StringBuffer();
-    sb.append("contains(text(),'#pic_foreach')");
-    sb.append(" or contains(text(), '#pic_end')");
-    List<Element> picForeachList = document.selectNodes("//*[namespace-uri()='http://schemas.openxmlformats.org/wordprocessingml/2006/main' and local-name()='t' and ("+sb.toString()+")]");
-    for (Element wt:picForeachList) {
-      String foreachContent = wt.getTextTrim().replaceAll("^#pic_", "#");
-      // 找到w:p祖先元素
-      Element wp = (Element) wt.selectSingleNode("ancestor::w:p");
-      if(wt.getTextTrim().contains("foreach")) {
-        List<Element> wDrawingList = new ArrayList<>();
-        List<Element> wpSiblingList = wp.selectNodes("following-sibling::*");
-        for(Element sibling:wpSiblingList) {
-          String content = sibling.getStringValue();
-          if(content.contains("#pic_end")) break;
-          wDrawingList.addAll(sibling.selectNodes("descendant::w:drawing"));
-        }
-        // 放占位图片的w:p中可能不止一个占位图片，需要使用他们的“替代文字”来标识不同的图片
-        handleDrawingList(wDrawingList, document, foreachContent);
-      }
-      // 将w:p祖先元素替换成临时标签元素
-      int index = wp.getParent().indexOf(wp);
-      if(indexFitFlag) index = (index - 1) / 2;
-      Element tmp = DocumentHelper.createElement(TEMP_TAG);
-      String text = wt.getText().replaceAll("^#pic_", "#");
-      tmp.setText(text);
-      wp.getParent().elements().add(index, tmp);
-      wp.detach();
-    }
-  }
-  /**
-   * 处理行内图片foreach循环，单行多个或者多个都可以，需要在图片的“替换文字”处提供对应的域明，用于标识不同图片
-   * 找到#pic_inline_foreach, #pic_inline_end标签，在#foreach和#end中间，所有w:drawing元素就是图片元素
-   * 替换图片元素中的rId内容，引入$!{foreach.index}实现图片数量的动态变化
-   * 新增Relationship及pkg:part，同样引入$!{foreach.index}实现图片数量的动态变化
-   * 行内循环在图片的wp元素内部加foreach, end语法
-   * @param document 目标文档
-   */
-  public static void handlePictureInlineForeach(Document document) {
-    StringBuffer sb = new StringBuffer();
-    sb.append("contains(text(),'#pic_inline_foreach')");
-    sb.append(" or contains(text(), '#pic_inline_end')");
-    List<Element> picForeachList = document.selectNodes("//*[namespace-uri()='http://schemas.openxmlformats.org/wordprocessingml/2006/main' and local-name()='t' and ("+sb.toString()+")]");
-    for (Element wt:picForeachList) {
-      // 获取foreach标签内容
-      String foreachContent = wt.getTextTrim().replaceAll("^#pic_inline_", "#");
-      // 找到w:p祖先元素，需要把foreach放到接下来目标w:p第一个wt位置中，把end放到目标w:p最后一个wt位置
-      Element wp = (Element) wt.selectSingleNode("ancestor::w:p");
-      if(foreachContent.contains("foreach")) {
-        // 放占位图片的w:p中可能不止一个占位图片，需要使用他们的“替代文字”来标识不同的图片
-        List<Element> wDrawingList = wp.selectNodes("descendant::w:drawing");
-        handleDrawingList(wDrawingList, document, foreachContent);
-      }
-      // 行内循环，将临时标签放到pic所在的w:p元素中，foreach放在w:pPr后面，end放在最后
-      Element tmp = DocumentHelper.createElement(TEMP_TAG);
-      String text = wt.getText().replaceAll("^#pic_inline_", "#");
-      tmp.setText(text);
-      if(text.contains("foreach")) {
-        // 如果是pic_inline_multi_foreach，则将foreach语句放到图片所在w:p的w:pPr后面
-        int index = wp.indexOf(wp.element("pPr"));
-        if(indexFitFlag) index = (index - 1) / 2;
-        wp.elements().add(index + 1, tmp);
-      } else {
-        // 如果是pic_inline_end，则将end语句放到图片所在w:p的最后即可
-        wp.elements().add(tmp);
-      }
-      wt.detach();
-    }
-  }
   private static void handleDrawingList(List<Element> wDrawingList, Document document, String foreachContent) {
     for(Element drawingElement:wDrawingList) {
       Element docPr = (Element) drawingElement.selectSingleNode("descendant::wp:docPr");
