@@ -56,7 +56,7 @@ false: 在w:tc的w:tcPr中加入<w:vMerge/>
 #pic_foreach, #pic_end 处理换行图片foreach循环
 #pic_inline_foreach, #pic_inline_end 处理行内图片foreach循环
 在word中用”替换文字“用域来标记图片，域必须以"$!{"开始，必须以"}"结束，否则如果值为空时binaryData会有问题
-思路：找到#pic_foreach, #pic_end, #pic_inline_foreach, #pic_inline_end标签，紧跟在#foreach所在的w:p之后的包含w:drawing元素的w:p兄弟元素就是图片元素
+思路：找到#pic_foreach, #pic_end, #pic_inline_foreach, #pic_inline_end标签，在#foreach和#end中间，所有w:drawing元素就是图片元素
 找到图片元素列表，循环列表
 替换图片元素中的rId内容，引入$!{foreach.index}实现图片数量的动态变化
 新增Relationship及pkg:part，同样引入$!{foreach.index}实现图片数量的动态变化

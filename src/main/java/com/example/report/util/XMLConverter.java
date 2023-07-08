@@ -71,6 +71,7 @@ public class XMLConverter {
     handlePictureElement(document);
     // 处理图片循环
     handlePictureForeach(document);
+    handlePictureInlineForeach(document);
     removeRedundantPictureAttribute(document);
     System.out.println("图片处理完成");
     // 移除临时标签，保留标签的text
@@ -554,74 +555,92 @@ public class XMLConverter {
   }
 
   /**
-   * 处理图片foreach循环，单行多个或者多个都可以，需要在图片的“替换文字”处提供对应的域明，用于标识不同图片
-   * 找到#pic_foreach, #pic_end, #pic_inline_foreach, #pic_inline_end标签，紧跟在#foreach所在的w:p之后的包含w:drawing的w:p兄弟元素就是图片元素
+   * 处理换行图片foreach循环，单行多个或者多个都可以，需要在图片的“替换文字”处提供对应的域明，用于标识不同图片
+   * 找到#pic_foreach, #pic_end标签，在#foreach和#end中间，所有w:drawing元素就是图片元素
    * 替换图片元素中的rId内容，引入$!{foreach.index}实现图片数量的动态变化
    * 新增Relationship及pkg:part，同样引入$!{foreach.index}实现图片数量的动态变化
    * 换行循环在图片的wp元素前后加foreach, end语法
-   * 行内循环在图片的wp元素内部加foreach, end语法
    * @param document 目标文档
    */
   public static void handlePictureForeach(Document document) {
     StringBuffer sb = new StringBuffer();
     sb.append("contains(text(),'#pic_foreach')");
     sb.append(" or contains(text(), '#pic_end')");
-    sb.append(" or contains(text(), '#pic_inline_foreach')");
+    List<Element> picForeachList = document.selectNodes("//*[namespace-uri()='http://schemas.openxmlformats.org/wordprocessingml/2006/main' and local-name()='t' and ("+sb.toString()+")]");
+    for (Element wt:picForeachList) {
+      String foreachContent = wt.getTextTrim().replaceAll("^#pic_", "#");
+      // 找到w:p祖先元素
+      Element wp = (Element) wt.selectSingleNode("ancestor::w:p");
+      if(wt.getTextTrim().contains("foreach")) {
+        List<Element> wDrawingList = new ArrayList<>();
+        List<Element> wpSiblingList = wp.selectNodes("following-sibling::*");
+        for(Element sibling:wpSiblingList) {
+          String content = sibling.getStringValue();
+          if(content.contains("#pic_end")) break;
+          wDrawingList.addAll(sibling.selectNodes("descendant::w:drawing"));
+        }
+        // 放占位图片的w:p中可能不止一个占位图片，需要使用他们的“替代文字”来标识不同的图片
+        handleDrawingList(wDrawingList, document, foreachContent);
+      }
+      // 将w:p祖先元素替换成临时标签元素
+      int index = wp.getParent().indexOf(wp);
+      if(indexFitFlag) index = (index - 1) / 2;
+      Element tmp = DocumentHelper.createElement(TEMP_TAG);
+      String text = wt.getText().replaceAll("^#pic_", "#");
+      tmp.setText(text);
+      wp.getParent().elements().add(index, tmp);
+      wp.detach();
+    }
+  }
+  /**
+   * 处理行内图片foreach循环，单行多个或者多个都可以，需要在图片的“替换文字”处提供对应的域明，用于标识不同图片
+   * 找到#pic_inline_foreach, #pic_inline_end标签，在#foreach和#end中间，所有w:drawing元素就是图片元素
+   * 替换图片元素中的rId内容，引入$!{foreach.index}实现图片数量的动态变化
+   * 新增Relationship及pkg:part，同样引入$!{foreach.index}实现图片数量的动态变化
+   * 行内循环在图片的wp元素内部加foreach, end语法
+   * @param document 目标文档
+   */
+  public static void handlePictureInlineForeach(Document document) {
+    StringBuffer sb = new StringBuffer();
+    sb.append("contains(text(),'#pic_inline_foreach')");
     sb.append(" or contains(text(), '#pic_inline_end')");
     List<Element> picForeachList = document.selectNodes("//*[namespace-uri()='http://schemas.openxmlformats.org/wordprocessingml/2006/main' and local-name()='t' and ("+sb.toString()+")]");
     for (Element wt:picForeachList) {
       // 获取foreach标签内容
-      String foreachContent = wt.getTextTrim();
-      boolean inline = false;
-      if(foreachContent.contains("inline")) {
-        inline = true;
-      }
-      foreachContent = foreachContent.replaceAll("^#pic_inline_|^#pic_", "#");
-      // 找到w:p祖先元素
+      String foreachContent = wt.getTextTrim().replaceAll("^#pic_inline_", "#");
+      // 找到w:p祖先元素，需要把foreach放到接下来目标w:p第一个wt位置中，把end放到目标w:p最后一个wt位置
       Element wp = (Element) wt.selectSingleNode("ancestor::w:p");
-      Element wpPic = null;
       if(foreachContent.contains("foreach")) {
-        // 如果是foreach，那么接下来找到w:p的下一个包含w:drawing元素的兄弟元素，就是放占位图片的
-        Element wDrawing = (Element) wp.selectSingleNode("following-sibling::w:p//w:drawing");
-        // 循环中可能有占位图片，这里不处理
-        // todo
-        wpPic = (Element) wDrawing.selectSingleNode("ancestor::w:p");
         // 放占位图片的w:p中可能不止一个占位图片，需要使用他们的“替代文字”来标识不同的图片
-        List<Element> wDrawingList = wpPic.selectNodes("descendant::w:drawing");
-        for(Element drawingElement:wDrawingList) {
-          Element docPr = (Element) drawingElement.selectSingleNode("descendant::wp:docPr");
-          String domainName = docPr.attributeValue("descr");
-          // 获取foreach中item的内容
-          String foreachItemContent = domainName;
-          addPictureElement(document,drawingElement, foreachContent, foreachItemContent);
-        }
+        List<Element> wDrawingList = wp.selectNodes("descendant::w:drawing");
+        handleDrawingList(wDrawingList, document, foreachContent);
       }
-      if(inline) {
-        // 如果是行内循环，就将临时标签放到pic所在的w:p元素中，foreach放在w:pPr后面，end放在最后
-        Element tmp = DocumentHelper.createElement(TEMP_TAG);
-        String text = wt.getText().replaceAll("^#pic_inline_", "#");
-        tmp.setText(text);
-        if(text.contains("foreach")) {
-          // 如果是pic_inline_multi_foreach，则将foreach语句放到图片所在w:p的w:pPr后面
-          int index = wpPic.indexOf(wpPic.element("pPr"));
-          if(indexFitFlag) index = (index - 1) / 2;
-          wpPic = (Element) wp.selectSingleNode("following-sibling::w:p");
-          wpPic.elements().add(index + 1, tmp);
-        } else {
-          // 如果是pic_inline_end，则将end语句放到图片所在w:p的最后即可
-          wpPic = (Element) wp.selectSingleNode("preceding-sibling::w:p[1]");
-          wpPic.elements().add(tmp);
-        }
-      } else {
-        // 将w:p祖先元素替换成临时标签元素
-        int index = wp.getParent().indexOf(wp);
+      // 行内循环，将临时标签放到pic所在的w:p元素中，foreach放在w:pPr后面，end放在最后
+      Element tmp = DocumentHelper.createElement(TEMP_TAG);
+      String text = wt.getText().replaceAll("^#pic_inline_", "#");
+      tmp.setText(text);
+      if(text.contains("foreach")) {
+        // 如果是pic_inline_multi_foreach，则将foreach语句放到图片所在w:p的w:pPr后面
+        int index = wp.indexOf(wp.element("pPr"));
         if(indexFitFlag) index = (index - 1) / 2;
-        Element tmp = DocumentHelper.createElement(TEMP_TAG);
-        String text = wt.getText().replaceAll("^#pic_", "#");
-        tmp.setText(text);
-        wp.getParent().elements().add(index, tmp);
+        wp.elements().add(index + 1, tmp);
+      } else {
+        // 如果是pic_inline_end，则将end语句放到图片所在w:p的最后即可
+        wp.elements().add(tmp);
       }
-      wp.detach();
+      wt.detach();
+    }
+  }
+  private static void handleDrawingList(List<Element> wDrawingList, Document document, String foreachContent) {
+    for(Element drawingElement:wDrawingList) {
+      Element docPr = (Element) drawingElement.selectSingleNode("descendant::wp:docPr");
+      String domainName = docPr.attributeValue("descr");
+      if(domainName == null) throw new RuntimeException("图片没有填写”替换文字“，请检查");
+      // 如果时占位图片或者固定图片，不在这里处理
+      if(domainName.matches("^placeholder.*?|^static.*?")) continue;
+      // 获取foreach中item的内容
+      String foreachItemContent = domainName;
+      addPictureElement(document,drawingElement, foreachContent, foreachItemContent);
     }
   }
   private static void addPictureElement(Document document, Element drawingElement, String foreachContent, String foreachItemContent) {
