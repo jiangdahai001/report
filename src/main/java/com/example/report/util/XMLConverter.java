@@ -446,14 +446,7 @@ public class XMLConverter {
       for(Element sibling:siblingList) {
         if(sibling.getStringValue().contains("#tbl_tr_end_foreach")) break;
         List<Element> drawingList = sibling.selectNodes("descendant::*//w:drawing");
-        for (Element drawing : drawingList) {
-          Element docPr = (Element) drawing.selectSingleNode("descendant::wp:docPr");
-          String domainName = docPr.attributeValue("descr");
-          if(domainName == null) throw new RuntimeException("图片没有填写”替换文字“，请检查");
-          // 如果时占位图片或者固定图片，不在这里处理
-          if (domainName.matches("^placeholder.*?|^static.*?")) continue;
-          addPictureElement(document, drawing, foreachContent, domainName);
-        }
+        handleDrawingList(drawingList, document, foreachContent);
       }
     }
     // 处理标签相关内容
@@ -592,7 +585,7 @@ public class XMLConverter {
       Element docPr = (Element) drawingElement.selectSingleNode("descendant::wp:docPr");
       String domainName = docPr.attributeValue("descr");
       if(domainName == null) throw new RuntimeException("图片没有填写”替换文字“，请检查");
-      // 如果时占位图片或者固定图片，不在这里处理
+      // 如果是占位图片或者固定图片，不在这里处理
       if(domainName.matches("^placeholder.*?|^static.*?")) continue;
       // 获取foreach中item的内容
       String foreachItemContent = domainName;
