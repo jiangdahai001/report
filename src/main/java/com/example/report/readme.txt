@@ -18,16 +18,15 @@
 处理在模板中，使用velocity的set、if、foreach、macro等语法
 #p_if, #p_elseif, #p_else, #p_end, #p_set, #p_macro, #p_foreach
 前提是都是独立的段落中，即语法所在的父元素wp是后面要被移除的
-关于带有换行图片的foreach循环，需要配合#p_end_foreach，用于标识循环结束
 处理换行图片foreach循环，单行多个或者多个都可以，需要在图片的“替换文字”处提供对应的域明，用于标识不同图片
-找到#p_foreach, #p_end_foreach标签，在#foreach和#end中间，所有w:drawing元素就是图片元素
+找到#p_foreach, #p_end标签，在#foreach和#end中间，所有w:drawing元素就是图片元素
 替换图片元素中的rId内容，引入$!{foreach.index}实现图片数量的动态变化
 新增Relationship及pkg:part，同样引入$!{foreach.index}实现图片数量的动态变化
 
 #inline_if, #inline_elseif, #inline_else, #inline_end, #inline_set, #inline_macro, #inline_foreach
 前提是都是段落行内中，即语法所在的父元素wr是后面要被移除的
 关于带有行内图片的foreach循环，单行多个或者多个都可以，需要在图片的“替换文字”处提供对应的域明，用于标识不同图片
-找到#inline_foreach标签，标签所在的w:p下所有w:drawing元素就是图片元素
+找到#inline_foreach标签，标签所在的w:p下foreach和end中间所有w:drawing元素就是图片元素
 替换图片元素中的rId内容，引入$!{foreach.index}实现图片数量的动态变化
 新增Relationship及pkg:part，同样引入$!{foreach.index}实现图片数量的动态变化
 

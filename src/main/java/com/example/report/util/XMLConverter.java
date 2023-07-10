@@ -180,7 +180,6 @@ public class XMLConverter {
    * 处理在独立段落中，使用velocity的set、if、foreach、macro等语法
    * 前提是都是独立的段落中，即语法所在的父元素wp是后面要被移除的
    *
-   * 关于带有图片的foreach，需要配合#p_end_foreach，用于标识循环结束
    * 处理换行图片foreach循环，单行多个或者多个都可以，需要在图片的“替换文字”处提供对应的域明，用于标识不同图片
    * 找到#p_foreach, #p_end_foreach标签，在#foreach和#end中间，所有w:drawing元素就是图片元素
    * 替换图片元素中的rId内容，引入$!{foreach.index}实现图片数量的动态变化
@@ -200,23 +199,63 @@ public class XMLConverter {
     sb.append(" or contains(text(), '#p_macro')");
     // foreach 标签相关
     sb.append(" or contains(text(), '#p_foreach')");
-    sb.append(" or contains(text(), '#p_end_foreach')");
+//    sb.append(" or contains(text(), '#p_end_foreach')");
     List<Element> pifList = document.selectNodes("//*[local-name()='t' and ("+sb.toString()+")]");
     for(Element wt:pifList) {
       Element wp = (Element) wt.selectSingleNode("ancestor::w:p");
       // 处理包括图片的循环内容
       if(wt.getTextTrim().contains("#p_foreach")) {
+        String text = wt.getText();
+        // 如果文本已经包含了#set(这是设置当前循环索引的变量使用的语法),说明这个foreach已经被处理过了
+        if(text.contains("#set")) break;
+        // 如果没有被处理过，就加上#set语法，设置当前循环的索引变量
         String foreachContent = wt.getTextTrim().replaceAll("^#p_", "#");
-        List<Element> wDrawingList = new ArrayList<>();
+        // 这里记录foreach的内容变化过程，因为后续遇到end时，需要将foreachContent换成上一个foreach的内容
+        // 主要处理的是嵌套的多个平级的foreach情况，例如foreach(item)...foreach(item.a)...end...foreach(item.b)...end...end
+        List<String> foreachContentList = new ArrayList<>();
+        foreachContentList.add(foreachContent);
+        // 当前循环层数，从第一层开始
+        int currentLayer = 1;
+        // 当前层数index变量名
+        String currentLayerIndex = "$layer" + currentLayer + "index";
+        foreachContent = foreachContent + " #set("+currentLayerIndex+"=$!{foreach.index}) ";
+        wt.setText(foreachContent);
         List<Element> wpSiblingList = wp.selectNodes("following-sibling::*");
-        // p_foreach到p_end_foreach之间的w:drawing都是参与循环的图片对象
+        // p_foreach到p_end之间的w:drawing都是参与循环的图片对象
         for(Element sibling:wpSiblingList) {
           String content = sibling.getStringValue();
-          if(content.contains("#p_end_foreach")) break;
-          wDrawingList.addAll(sibling.selectNodes("descendant::w:drawing"));
+          // 如果遇到p_if,index自增
+          if(content.contains("#p_if")) {
+            currentLayer++;
+            foreachContentList.add(foreachContent);
+          }
+          // 如果遇到p_foreach，则index自增
+          if(content.contains("#p_foreach")) {
+            List<Element> wtList = sibling.selectNodes("descendant::w:t");
+            Element currentWt = null;
+            for(Element tmpWt:wtList) {
+              if(tmpWt.getTextTrim().contains("#p_foreach")) {
+                currentWt = tmpWt;
+              }
+            }
+            String currentForeachContent = currentWt.getTextTrim().replaceAll("^#p_", "#");
+            currentLayer++;
+            currentLayerIndex = "$layer" + currentLayer + "index";
+            currentForeachContent = currentForeachContent + " #set("+currentLayerIndex+"=$!{foreach.index}) ";
+            currentWt.setText(currentForeachContent);
+            // foreach语句的内容要将所有的循环层的内容包括进去才行
+            foreachContent = foreachContent + " " + currentForeachContent;
+            foreachContentList.add(foreachContent);
+          }
+          // 如果遇到p_end，则index自减
+          if(content.contains("#p_end")) {
+            currentLayer--;
+            foreachContent = foreachContentList.get(currentLayer);
+          }
+          if(currentLayer == 0) break;
+          List<Element> wDrawingList = sibling.selectNodes("descendant::w:drawing");
+          handleDrawingList(wDrawingList, document, foreachContent);
         }
-        // 放占位图片的w:p中可能不止一个占位图片，需要使用他们的“替代文字”来标识不同的图片
-        handleDrawingList(wDrawingList, document, foreachContent);
       }
       int index = wp.getParent().indexOf(wp);
       if(indexFitFlag) index = (index - 1) / 2;
@@ -255,13 +294,58 @@ public class XMLConverter {
     for(Element wt:elementList) {
       Element wr = (Element) wt.selectSingleNode("ancestor::w:r");
       // 处理图片元素
-      // 找到w:p祖先元素，需要把foreach放到接下来目标w:p第一个wt位置中，把end放到目标w:p最后一个wt位置
-      Element wp = (Element) wt.selectSingleNode("ancestor::w:p");
-      if(wt.getText().contains("#inline_foreach")) {
+      if(wt.getTextTrim().contains("#inline_foreach")) {
+        String text = wt.getText();
+        // 如果文本已经包含了#set(这是设置当前循环索引的变量使用的语法),说明这个foreach已经被处理过了
+        if(text.contains("#set")) break;
+        // 如果没有被处理过，就加上#set语法，设置当前循环的索引变量
         String foreachContent = wt.getTextTrim().replaceAll("^#inline_", "#");
-        // 放占位图片的w:p中可能不止一个占位图片，需要使用他们的“替代文字”来标识不同的图片
-        List<Element> wDrawingList = wp.selectNodes("descendant::w:drawing");
-        handleDrawingList(wDrawingList, document, foreachContent);
+        // 这里记录foreach的内容变化过程，因为后续遇到end时，需要将foreachContent换成上一个foreach的内容
+        // 主要处理的是嵌套的多个平级的foreach情况，例如foreach(item)...foreach(item.a)...end...foreach(item.b)...end...end
+        List<String> foreachContentList = new ArrayList<>();
+        foreachContentList.add(foreachContent);
+        // 当前循环层数，从第一层开始
+        int currentLayer = 1;
+        // 当前层数index变量名
+        String currentLayerIndex = "$layer" + currentLayer + "index";
+        foreachContent = foreachContent + " #set("+currentLayerIndex+"=$!{foreach.index}) ";
+        wt.setText(foreachContent);
+        List<Element> wrSiblingList = wr.selectNodes("following-sibling::*");
+        // inline_foreach到inline_end之间的w:drawing都是参与循环的图片对象
+        for(Element sibling:wrSiblingList) {
+          String content = sibling.getStringValue();
+          // 如果遇到inline_if,index自增
+          if(content.contains("#inline_if")) {
+            currentLayer++;
+            foreachContentList.add(foreachContent);
+          }
+          // 如果遇到inline_foreach，则index自增
+          if(content.contains("#inline_foreach")) {
+            List<Element> wtList = sibling.selectNodes("descendant::w:t");
+            Element currentWt = null;
+            for(Element tmpWt:wtList) {
+              if(tmpWt.getTextTrim().contains("#inline_foreach")) {
+                currentWt = tmpWt;
+              }
+            }
+            String currentForeachContent = currentWt.getTextTrim().replaceAll("^#inline_", "#");
+            currentLayer++;
+            currentLayerIndex = "$layer" + currentLayer + "index";
+            currentForeachContent = currentForeachContent + " #set("+currentLayerIndex+"=$!{foreach.index}) ";
+            currentWt.setText(currentForeachContent);
+            // foreach语句的内容要将所有的循环层的内容包括进去才行
+            foreachContent = foreachContent + " " + currentForeachContent;
+            foreachContentList.add(foreachContent);
+          }
+          // 如果遇到inline_end，则index自减
+          if(content.contains("#inline_end")) {
+            currentLayer--;
+            foreachContent = foreachContentList.get(currentLayer);
+          }
+          if(currentLayer == 0) break;
+          List<Element> wDrawingList = sibling.selectNodes("descendant::w:drawing");
+          handleDrawingList(wDrawingList, document, foreachContent);
+        }
       }
       int index = wr.getParent().indexOf(wr);
       if(indexFitFlag) index = (index - 1) / 2;
@@ -430,9 +514,8 @@ public class XMLConverter {
     // tbl_tr_foreach, tbl_tr_end
     // tbl_tr_if, tbl_tr_else, tbl_tr_elseif, tbl_tr_end
     StringBuffer sb = new StringBuffer();
-    sb.append("contains(text(),'#tbl_tr_foreach')");
-    sb.append(" or contains(text(), '#tbl_tr_end_foreach')");
-    sb.append(" or contains(text(), '#tbl_tr_if')");
+    sb.append("contains(text(),'#tbl_tr_if')");
+//    sb.append(" or contains(text(), '#tbl_tr_foreach')");
     sb.append(" or contains(text(), '#tbl_tr_else')");
     sb.append(" or contains(text(), '#tbl_tr_elseif')");
     sb.append(" or contains(text(), '#tbl_tr_end')");
@@ -440,15 +523,64 @@ public class XMLConverter {
     // 处理循环图片相关的内容，这里只处理图片，标签相关内容在下面处理
     List<Element> trForeachList = document.selectNodes("//*[local-name()='t' and (contains(text(), '#tbl_tr_foreach'))]");
     for(Element wt:trForeachList) {
-      String foreachContent = wt.getText().replaceAll("^#tbl_tr_", "#").replaceAll("_foreach$", "");
       Element tr = (Element) wt.selectSingleNode("ancestor::w:tr");
-      List<Element> siblingList = tr.selectNodes("following-sibling::*");
-      for(Element sibling:siblingList) {
-        if(sibling.getStringValue().contains("#tbl_tr_end_foreach")) break;
-        List<Element> drawingList = sibling.selectNodes("descendant::*//w:drawing");
-        handleDrawingList(drawingList, document, foreachContent);
+      // 处理图片元素
+      String text = wt.getText();
+      // 如果文本已经包含了#set(这是设置当前循环索引的变量使用的语法),说明这个foreach已经被处理过了
+      if (text.contains("#set")) break;
+      // 如果没有被处理过，就加上#set语法，设置当前循环的索引变量
+      String foreachContent = wt.getTextTrim().replaceAll("^#tbl_tr_", "#");
+      // 这里记录foreach的内容变化过程，因为后续遇到end时，需要将foreachContent换成上一个foreach的内容
+      // 主要处理的是嵌套的多个平级的foreach情况，例如foreach(item)...foreach(item.a)...end...foreach(item.b)...end...end
+      List<String> foreachContentList = new ArrayList<>();
+      foreachContentList.add(foreachContent);
+      // 当前循环层数，从第一层开始
+      int currentLayer = 1;
+      // 当前层数index变量名
+      String currentLayerIndex = "$layer" + currentLayer + "index";
+      foreachContent = foreachContent + " #set(" + currentLayerIndex + "=$!{foreach.index}) ";
+      // 这里加上#tbl_tr_前缀，主要是为了后续操作可以选中这些对象做处理不至于被遗漏
+      wt.setText("#tbl_tr_" + foreachContent);
+      List<Element> trSiblingList = tr.selectNodes("following-sibling::*");
+      // tbl_tr_foreach到tbl_tr_end之间的w:drawing都是参与循环的图片对象
+      for (Element sibling : trSiblingList) {
+        String content = sibling.getStringValue();
+        // 如果遇到tbl_tr_if,index自增
+        if (content.contains("#tbl_tr_if")) {
+          currentLayer++;
+          foreachContentList.add(foreachContent);
+        }
+        // 如果遇到tbl_tr_foreach，则index自增
+        if (content.contains("#tbl_tr_foreach")) {
+          List<Element> wtList = sibling.selectNodes("descendant::w:t");
+          Element currentWt = null;
+          for (Element tmpWt : wtList) {
+            if (tmpWt.getTextTrim().contains("#tbl_tr_foreach")) {
+              currentWt = tmpWt;
+            }
+          }
+          String currentForeachContent = currentWt.getTextTrim().replaceAll("^#tbl_tr_", "#");
+          currentLayer++;
+          currentLayerIndex = "$layer" + currentLayer + "index";
+          currentForeachContent = currentForeachContent + " #set(" + currentLayerIndex + "=$!{foreach.index}) ";
+          // 这里加上#tbl_tr_前缀，主要是为了后续操作可以选中这些对象做处理不至于被遗漏
+          currentWt.setText("#tbl_tr_" + currentForeachContent);
+          // foreach语句的内容要将所有的循环层的内容包括进去才行
+          foreachContent = foreachContent + " " + currentForeachContent;
+          foreachContentList.add(foreachContent);
+        }
+        // 如果遇到tbl_tr_end，则index自减
+        if (content.contains("#tbl_tr_end")) {
+          currentLayer--;
+          foreachContent = foreachContentList.get(currentLayer);
+        }
+        if (currentLayer == 0) break;
+        List<Element> wDrawingList = sibling.selectNodes("descendant::w:drawing");
+        handleDrawingList(wDrawingList, document, foreachContent);
       }
     }
+    // 经过前面的处理，foreach的前缀已经变成了#tbl_tr_#foreach
+    sb.append(" or contains(text(), '#tbl_tr_#foreach')");
     // 处理标签相关内容
     List<Element> trList = document.selectNodes("//*[local-name()='t' and ("+sb.toString()+")]");
     for(Element wt:trList) {
@@ -457,7 +589,7 @@ public class XMLConverter {
       int index = tbl.indexOf(tr);
       if(indexFitFlag) index = (index - 1) / 2;
       Element foreach = DocumentHelper.createElement(TEMP_TAG);
-      String text = wt.getText().replaceAll("^#tbl_tr_", "#").replaceAll("_foreach$", "");
+      String text = wt.getText().replaceAll("^#tbl_tr_#|^#tbl_tr_", "#");
       foreach.setText(text);
       tbl.elements().add(index, foreach);
       tbl.remove(tr);
@@ -593,21 +725,34 @@ public class XMLConverter {
     }
   }
   private static void addPictureElement(Document document, Element drawingElement, String foreachContent, String foreachItemContent) {
+    // 通过foreachContent获取当前的循环层数，并获取rId，Target，pkg:name中的名字后缀
+    StringBuffer suffix = new StringBuffer();
+    // 获取foreach对应的end的字符串，每个循环层数对应一个end
+    StringBuffer ends = new StringBuffer();
+    Matcher matcher = Pattern.compile("\\$layer\\d+?index").matcher(foreachContent);
+    while(matcher.find()) {
+      String group = matcher.group().replaceAll("^\\$", "");
+      suffix.append("_$!{");
+      suffix.append(group);
+      suffix.append("}");
+      ends.append("#end");
+    }
     // 生成唯一id，用于关联w:drawing中rId---Relationship中Target---pkg:part中的binaryData
     String uuid = UUID.randomUUID().toString().replace("-", "");
     Element blip = (Element) drawingElement.selectSingleNode("descendant::*[namespace-uri()='http://schemas.openxmlformats.org/drawingml/2006/main' and local-name()='blip']");
-    blip.addAttribute("embed", "rId_" + uuid + "_$!{foreach.index}");
+//    blip.addAttribute("embed", "rId_" + uuid + "_$!{foreach.index}");
+    blip.addAttribute("embed", "rId_" + uuid + suffix.toString());
     // 新增Relationship循环开始标签
     Element relationshipForeachBegin = DocumentHelper.createElement(TEMP_TAG);
     relationshipForeachBegin.setText(foreachContent);
     // 新增Relationship循环内容标签
     Element relationshipForeachContent = DocumentHelper.createElement(QName.get("Relationship", "http://schemas.openxmlformats.org/package/2006/relationships"));
-    relationshipForeachContent.addAttribute("Id", "rId_" + uuid + "_$!{foreach.index}");
+    relationshipForeachContent.addAttribute("Id", "rId_" + uuid + suffix.toString());
     relationshipForeachContent.addAttribute("Type", "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image");
-    relationshipForeachContent.addAttribute("Target", "media/image_" + uuid + "_$!{foreach.index}.png");
+    relationshipForeachContent.addAttribute("Target", "media/image_" + uuid + suffix.toString() +".png");
     // 新增Relationship循环结束标签
     Element relationshipForeachEnd = DocumentHelper.createElement(TEMP_TAG);
-    relationshipForeachEnd.setText("#end");
+    relationshipForeachEnd.setText(ends.toString());
     // 将Relationship循环标签添加到Relationships中
     Element pkgPart = (Element) document.selectSingleNode("//*[namespace-uri()='http://schemas.microsoft.com/office/2006/xmlPackage' and local-name()='part' and @pkg:name='/word/_rels/document.xml.rels']");
     Element relationships = (Element) pkgPart.selectSingleNode("descendant::*[namespace-uri()='http://schemas.openxmlformats.org/package/2006/relationships' and local-name()='Relationships']");
@@ -619,7 +764,7 @@ public class XMLConverter {
     pkgPartForeachBegin.setText(foreachContent);
     // 新增pkg:part循环内容标签
     Element pkgPartForeachContent = DocumentHelper.createElement("pkg:part");
-    pkgPartForeachContent.addAttribute("pkg:name", "/word/media/image_" + uuid + "_$!{foreach.index}.png");
+    pkgPartForeachContent.addAttribute("pkg:name", "/word/media/image_" + uuid + suffix.toString() + ".png");
     pkgPartForeachContent.addAttribute("pkg:contentType", "image/png");
     pkgPartForeachContent.addAttribute("pkg:compression", "store");
     Element binaryData = DocumentHelper.createElement("pkg:binaryData");
@@ -627,7 +772,7 @@ public class XMLConverter {
     pkgPartForeachContent.add(binaryData);
     // 新增pkg:part循环结束标签
     Element pkgPartForeachEnd = DocumentHelper.createElement(TEMP_TAG);
-    pkgPartForeachEnd.setText("#end");
+    pkgPartForeachEnd.setText(ends.toString());
     // 将pkg:part循环标签添加到pkg:package中
     Element pkgPackage = (Element) document.selectSingleNode("//*[namespace-uri()='http://schemas.microsoft.com/office/2006/xmlPackage' and local-name()='package']");
     pkgPackage.elements().add(pkgPartForeachBegin);

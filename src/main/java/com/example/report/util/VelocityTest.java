@@ -16,6 +16,8 @@ import java.io.*;
 import java.nio.charset.StandardCharsets;
 import java.text.SimpleDateFormat;
 import java.util.*;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 /**
@@ -74,23 +76,25 @@ public class VelocityTest {
     geneList.add("SZX");
     geneList.add("DBC");
     geneList.add("FLY");
-    PatientInfo pi = new PatientInfo("张三", "13512341234", "男", 16, geneList);
+    List<String> picBase64List = new ArrayList<>();
+    picBase64List.add(PictureData.getPicString1());
+    picBase64List.add(PictureData.getPicString2());
+    context.put("picBase64List", picBase64List);
+
+    PatientInfo pi = new PatientInfo("张三", "13512341234", "男", 16, geneList, picBase64List);
     context.put("pi", pi);
     context.put("geneList", geneList);
     List<PatientInfo> list = new ArrayList<>();
-    list.add(new PatientInfo("lisi1", "13512345678", "male", 17, geneList));
-    list.add(new PatientInfo("lisi2", "13512345678", "male", 18, geneList));
-    list.add(new PatientInfo("lisi2", "13512345678", "male", 18, geneList));
+    list.add(new PatientInfo("lisi1", "13512345678", "male", 17, geneList, picBase64List));
+    list.add(new PatientInfo("lisi2", "13512345678", "male", 18, geneList, picBase64List));
+    list.add(new PatientInfo("lisi2", "13512345678", "male", 18, geneList, picBase64List));
     context.put("list", list);
     List<CancerInfo> cancerList = new ArrayList<>();
     cancerList.add(new CancerInfo("lung", false, "", "", ""));
     cancerList.add(new CancerInfo("bone", true, "", "", ""));
     context.put("cancerList", cancerList);
     context.put("picBase64", PictureData.getPicString1());
-    List<String> picBase64List = new ArrayList<>();
-    picBase64List.add(PictureData.getPicString1());
-    picBase64List.add(PictureData.getPicString2());
-    context.put("picBase64List", picBase64List);
+
     // 表格合并数据
     CancerInfo ci = new CancerInfo("brain", false, "mb", "", "a");
     context.put("ci", ci);
